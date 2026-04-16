@@ -4,7 +4,7 @@ import { useGetVideo, getGetVideoQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Play, Download, Terminal, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Play, Download, Terminal, CheckCircle2, AlertCircle, Loader2, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 type LogEntry = {
