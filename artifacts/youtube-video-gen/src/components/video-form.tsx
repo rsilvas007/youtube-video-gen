@@ -21,7 +21,7 @@ import { Loader2, Plus, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 const videoFormSchema = z.object({
-  topic: z.string().min(3, "Topic is required").max(100),
+  topic: z.string().min(3, "O tema é obrigatório").max(100),
   style: z.enum(["curioso", "misterioso", "educativo", "dramático"]),
   durationMinutes: z.coerce.number().min(8).max(15),
   voice: z.enum(["alloy", "echo", "fable", "onyx", "nova", "shimmer"]),
@@ -52,11 +52,11 @@ export function VideoForm() {
       {
         onSuccess: (video) => {
           queryClient.invalidateQueries({ queryKey: getListVideosQueryKey() });
-          toast.success("Video job created!");
+          toast.success("Vídeo criado com sucesso!");
           setLocation(`/videos/${video.id}`);
         },
         onError: () => {
-          toast.error("Failed to create video job");
+          toast.error("Falha ao criar o vídeo");
         },
       }
     );
@@ -70,9 +70,9 @@ export function VideoForm() {
       <div className="mb-6">
         <h2 className="text-xl font-medium tracking-tight flex items-center gap-2">
           <Zap className="w-5 h-5 text-primary" />
-          New Generation
+          Nova Geração
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">Configure pipeline parameters.</p>
+        <p className="text-sm text-muted-foreground mt-1">Configure os parâmetros do pipeline.</p>
       </div>
 
       <Form {...form}>
@@ -82,9 +82,9 @@ export function VideoForm() {
             name="topic"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Topic</FormLabel>
+                <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Tema</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g. History of Quantum Mechanics" className="font-medium bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
+                  <Input placeholder="Ex: O Mistério das Pirâmides do Egito" className="font-medium bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -97,11 +97,11 @@ export function VideoForm() {
               name="style"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Style</FormLabel>
+                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Estilo</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                        <SelectValue placeholder="Select style" />
+                        <SelectValue placeholder="Selecione o estilo" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-popover border-border">
@@ -121,7 +121,7 @@ export function VideoForm() {
               name="durationMinutes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Duration (Min)</FormLabel>
+                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Duração (Min)</FormLabel>
                   <FormControl>
                     <Input type="number" min={8} max={15} className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
                   </FormControl>
@@ -137,11 +137,11 @@ export function VideoForm() {
               name="voice"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Voice Profile</FormLabel>
+                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Voz</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                        <SelectValue placeholder="Select voice" />
+                        <SelectValue placeholder="Selecione a voz" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-popover border-border">
@@ -163,7 +163,7 @@ export function VideoForm() {
               name="language"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Language</FormLabel>
+                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Idioma</FormLabel>
                   <FormControl>
                     <Input className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
                   </FormControl>
@@ -182,12 +182,12 @@ export function VideoForm() {
               {createVideo.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  INITIALIZING PIPELINE...
+                  INICIALIZANDO PIPELINE...
                 </>
               ) : (
                 <>
                   <Plus className="mr-2 h-5 w-5" />
-                  INITIALIZE GENERATION
+                  INICIAR GERAÇÃO
                 </>
               )}
             </Button>

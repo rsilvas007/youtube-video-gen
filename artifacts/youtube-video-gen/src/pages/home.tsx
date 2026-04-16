@@ -10,7 +10,7 @@ export default function Home() {
           <Activity className="w-8 h-8 text-primary" />
           YOUTUBE<span className="text-primary">GEN</span> STUDIO
         </h1>
-        <p className="text-muted-foreground mt-2 font-mono text-sm">AUTONOMOUS VIDEO GENERATION PIPELINE v1.0</p>
+        <p className="text-muted-foreground mt-2 font-mono text-sm">PIPELINE AUTÔNOMO DE GERAÇÃO DE VÍDEOS v1.0</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -20,13 +20,13 @@ export default function Home() {
         
         <div className="lg:col-span-7 space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium tracking-tight">System Logs / Past Jobs</h2>
+            <h2 className="text-lg font-medium tracking-tight">Histórico de Gerações</h2>
             <div className="text-xs font-mono text-muted-foreground flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
               </span>
-              SYSTEM ONLINE
+              SISTEMA ONLINE
             </div>
           </div>
           
