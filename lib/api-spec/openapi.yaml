@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: YouTube Video Generator API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: videos
+    description: Video generation operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,102 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /videos:
+    get:
+      operationId: listVideos
+      tags: [videos]
+      summary: List all generated videos
+      responses:
+        "200":
+          description: List of videos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Video"
+
+    post:
+      operationId: createVideo
+      tags: [videos]
+      summary: Start a new video generation job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVideoBody"
+      responses:
+        "201":
+          description: Video job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+
+  /videos/{id}:
+    get:
+      operationId: getVideo
+      tags: [videos]
+      summary: Get a video by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Video details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "404":
+          description: Not found
+
+  /videos/{id}/generate:
+    post:
+      operationId: generateVideo
+      tags: [videos]
+      summary: Run the full video generation pipeline (SSE)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: SSE stream of generation progress
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /videos/{id}/download:
+    get:
+      operationId: downloadVideo
+      tags: [videos]
+      summary: Download the final generated video
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: MP4 video file
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found or not ready
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +131,68 @@ components:
       required:
         - status
 
+    CreateVideoBody:
+      type: object
+      required:
+        - topic
+        - style
+        - durationMinutes
+        - voice
+      properties:
+        topic:
+          type: string
+          description: The video topic
+        style:
+          type: string
+          description: Video style (e.g. curious, mysterious, educational)
+        durationMinutes:
+          type: integer
+          description: Target video duration in minutes
+          minimum: 1
+          maximum: 30
+        voice:
+          type: string
+          description: Voice style (alloy, echo, fable, onyx, nova, shimmer)
+        language:
+          type: string
+          description: Language for narration (default pt-BR)
+
+    Video:
+      type: object
+      required:
+        - id
+        - topic
+        - style
+        - durationMinutes
+        - voice
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+        topic:
+          type: string
+        style:
+          type: string
+        durationMinutes:
+          type: integer
+        voice:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+          description: "pending | generating_script | generating_audio | generating_images | assembling_video | done | error"
+        progress:
+          type: integer
+          description: Progress percentage 0-100
+        errorMessage:
+          type: string
+        outputPath:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

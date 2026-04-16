@@ -1,0 +1,138 @@
+Crie uma aplicação completa em Python que gera automaticamente vídeos longos (8+ minutos) para YouTube usando IA.
+
+OBJETIVO:
+Construir um sistema automatizado que transforma um tema em um vídeo final com narração, imagens e edição.
+
+---
+
+FUNCIONALIDADES PRINCIPAIS:
+
+1. INPUT DO USUÁRIO:
+
+* Tema do vídeo (string)
+* Estilo (ex: curioso, misterioso, educativo)
+* Duração aproximada (ex: 8 minutos)
+* Escolha de voz (masculina, feminina, idioma)
+
+---
+
+2. GERAÇÃO DE ROTEIRO:
+
+* Usar IA para gerar um roteiro longo dividido em blocos (ex: BLOCO 1, BLOCO 2...)
+* Cada bloco deve ter frases curtas para narração
+
+---
+
+3. GERAÇÃO DE ÁUDIO:
+
+* Converter cada bloco em áudio (mp3)
+* Permitir escolha de voz (usar API TTS)
+* Salvar como:
+  /audio/audio_01.mp3, audio_02.mp3...
+
+Sugestão:
+usar APIs como ElevenLabs ou Google TTS
+
+---
+
+4. GERAÇÃO DE IMAGENS:
+
+* Criar 10 imagens (1 por seção/curiosidade)
+* Gerar prompts automaticamente baseados no roteiro
+* Estilo:
+
+  * cinematográfico
+  * dramático
+  * alto contraste
+* Salvar:
+  /images/img_01.png até img_10.png
+
+---
+
+5. PROCESSAMENTO DE VÍDEO:
+
+5.1 Juntar todos os áudios:
+
+* Criar list.txt automaticamente
+* Usar FFmpeg para gerar:
+  audio_full.mp3
+
+5.2 Criar vídeo base com imagens:
+
+* Usar FFmpeg com:
+  img_%02d.png
+* Cada imagem deve durar entre 6–10 segundos
+* Aplicar efeito zoom leve (Ken Burns)
+
+5.3 Combinar áudio + vídeo:
+
+* Sincronizar com:
+  audio_full.mp3
+* Gerar:
+  /output/video_final.mp4
+
+---
+
+6. INTERFACE SIMPLES:
+
+* Pode ser CLI (terminal) ou web simples (Flask)
+* Usuário digita o tema e clica em gerar
+
+---
+
+7. ORGANIZAÇÃO:
+
+/project
+/audio
+/images
+/output
+main.py
+
+---
+
+8. AUTOMAÇÃO:
+
+* Detectar e ordenar arquivos automaticamente
+* Executar pipeline completo com um comando:
+  python main.py
+
+---
+
+9. LOGS:
+   Mostrar progresso:
+
+* "Gerando roteiro..."
+* "Gerando áudio..."
+* "Gerando imagens..."
+* "Montando vídeo..."
+* "Finalizado!"
+
+---
+
+10. EXTRA (IMPORTANTE):
+
+* Estrutura preparada para adicionar legendas automáticas depois
+* Código modular e organizado
+
+---
+
+REQUISITOS:
+
+* Usar Python
+* Usar FFmpeg (subprocess)
+* Código funcional e simples
+* Comentado
+
+---
+
+RESULTADO FINAL:
+Arquivo único:
+output/video_final.mp4
+
+---
+
+IMPORTANTE:
+
+* Não criar múltiplos vídeos
+* Criar um único vídeo contínuo
+* Otimizado para vídeos longos (8+ minutos)
