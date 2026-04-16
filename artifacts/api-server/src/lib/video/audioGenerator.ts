@@ -20,23 +20,37 @@ export async function generateAudio(
       `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`
     );
 
-    const response = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: (voice as VoiceType) || "alloy",
-      input: block.text,
+    // Use chat completions with audio output modality (supported by Replit AI proxy)
+    const response = await openai.chat.completions.create({
+      model: "gpt-audio-mini",
+      modalities: ["text", "audio"],
+      audio: {
+        voice: (voice as VoiceType) || "alloy",
+        format: "mp3",
+      },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a professional narrator. Read the following text naturally and expressively, exactly as provided. Do not add any commentary.",
+        },
+        {
+          role: "user",
+          content: block.text,
+        },
+      ],
     });
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(outputPath, buffer);
+    const audioData = (response.choices[0]?.message as { audio?: { data?: string } })?.audio?.data;
+    if (!audioData) {
+      throw new Error(
+        `No audio data returned for block ${block.blockNumber}`
+      );
+    }
+
+    fs.writeFileSync(outputPath, Buffer.from(audioData, "base64"));
     audioPaths.push(outputPath);
   }
 
   return audioPaths;
-}
-
-export function createAudioListFile(audioPaths: string[], listFile: string): void {
-  const content = audioPaths
-    .map((p) => `file '${p}'`)
-    .join("\n");
-  fs.writeFileSync(listFile, content);
 }
