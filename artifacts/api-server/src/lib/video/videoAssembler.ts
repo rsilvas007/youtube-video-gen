@@ -68,7 +68,8 @@ export async function assembleVideo(
   const tempVideoPath = path.join(outputDir, "video_base.mp4");
 
   const totalImages = imagePaths.length;
-  const scale = "1920:1080";
+  const scaleFilter = "1920:1080";   // W:H for scale/pad filters
+  const zoompanSize = "1920x1080";   // WxH for zoompan s= parameter
 
   await runFFmpeg([
     "-y",
@@ -77,7 +78,7 @@ export async function assembleVideo(
     "-i",
     imagePattern,
     "-vf",
-    `scale=${scale}:force_original_aspect_ratio=decrease,pad=${scale}:(ow-iw)/2:(oh-ih)/2,setsar=1,zoompan=z='min(zoom+0.0008,1.3)':d=${secondsPerImage * 25}:s=${scale}`,
+    `scale=${scaleFilter}:force_original_aspect_ratio=decrease,pad=${scaleFilter}:(ow-iw)/2:(oh-ih)/2,setsar=1,zoompan=z='min(zoom+0.0008,1.3)':d=${secondsPerImage * 25}:s=${zoompanSize}`,
     "-c:v",
     "libx264",
     "-pix_fmt",
