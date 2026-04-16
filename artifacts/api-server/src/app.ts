@@ -1,6 +1,9 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import { like } from "drizzle-orm";
+import { db } from "@workspace/db";
+import { videosTable } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -30,5 +33,34 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// On startup, reset any jobs that were left in a generating_* state
+// (they were orphaned by a previous server restart mid-pipeline)
+async function resetStuckJobs(): Promise<void> {
+  try {
+    const stuck = await db
+      .select({ id: videosTable.id, status: videosTable.status })
+      .from(videosTable)
+      .where(like(videosTable.status, "generating_%"));
+
+    if (stuck.length > 0) {
+      await db
+        .update(videosTable)
+        .set({
+          status: "pending",
+          progress: 0,
+          errorMessage: "Geração interrompida por reinicialização do servidor. Clique em Gerar para tentar novamente.",
+          updatedAt: new Date(),
+        })
+        .where(like(videosTable.status, "generating_%"));
+
+      logger.info({ count: stuck.length }, "Reset stuck generating jobs to pending");
+    }
+  } catch (err) {
+    logger.error({ err }, "Failed to reset stuck jobs on startup");
+  }
+}
+
+resetStuckJobs();
 
 export default app;

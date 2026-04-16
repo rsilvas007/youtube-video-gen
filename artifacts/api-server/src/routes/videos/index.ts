@@ -97,8 +97,8 @@ router.post("/videos/:id/generate", async (req, res) => {
     return;
   }
 
-  if (video.status === "done" || video.status?.startsWith("generating_")) {
-    res.status(409).json({ error: `Video is already ${video.status}` });
+  if (video.status === "done") {
+    res.status(409).json({ error: "Video is already done" });
     return;
   }
 

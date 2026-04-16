@@ -184,8 +184,8 @@ export default function VideoDetail() {
               </div>
             </div>
 
-            <div className="mt-8">
-              {isPending && (
+            <div className="mt-8 space-y-3">
+              {(isPending || isError) && (
                 <Button 
                   onClick={startGeneration} 
                   disabled={isGenerating}
@@ -193,6 +193,8 @@ export default function VideoDetail() {
                 >
                   {isGenerating ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> STARTING...</>
+                  ) : isError ? (
+                    <><Play className="w-4 h-4 mr-2" /> RETRY GENERATION</>
                   ) : (
                     <><Play className="w-4 h-4 mr-2" /> START GENERATION</>
                   )}
@@ -208,9 +210,9 @@ export default function VideoDetail() {
                 </a>
               )}
               
-              {isError && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-destructive text-sm mt-4">
-                  {video.errorMessage || "An unknown error occurred during generation."}
+              {isError && video.errorMessage && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-destructive text-xs font-mono">
+                  {video.errorMessage}
                 </div>
               )}
             </div>
@@ -252,10 +254,18 @@ export default function VideoDetail() {
                 </div>
               ))}
               
-              {video.status !== "pending" && video.status !== "error" && logs.length === 0 && (
+              {video.status === "error" && logs.length === 0 && (
                 <div className="flex gap-4">
-                  <span className="text-primary">
-                    [SYSTEM] Job was started externally or previously. Reconnecting to logs not supported for past jobs. View current progress above.
+                  <span className="text-destructive">
+                    [ERROR] A geração falhou. Use o botão "Retry" para tentar novamente.
+                  </span>
+                </div>
+              )}
+
+              {video.status !== "pending" && video.status !== "error" && video.status !== "done" && logs.length === 0 && (
+                <div className="flex gap-4">
+                  <span className="text-yellow-400">
+                    [SYSTEM] Pipeline interrompido por reinicialização do servidor. Aguardando reset automático...
                   </span>
                 </div>
               )}
