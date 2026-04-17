@@ -241,15 +241,27 @@ function parseGeminiScript(content: string): ScriptBlock[] {
 }
 
 // ─── TTS GENERATION ──────────────────────────────────────────────────────────
+// Voice prefix → TTS model mapping:
+//   gemini-tts:VoiceName   → gemini-2.5-flash-preview-tts
+//   gemini-3.1-tts:VoiceName → gemini-3.1-flash-tts-preview
+
 export async function generateAudioWithGemini(
   blocks: ScriptBlock[],
   audioDir: string,
-  voiceEntry: string  // format: "gemini-tts:VoiceName"
+  voiceEntry: string
 ): Promise<string[]> {
   fs.mkdirSync(audioDir, { recursive: true });
 
-  const voiceName = voiceEntry.replace("gemini-tts:", "");
-  const ttsModel = "gemini-2.5-flash-preview-tts";
+  let voiceName: string;
+  let ttsModel: string;
+
+  if (voiceEntry.startsWith("gemini-3.1-tts:")) {
+    voiceName = voiceEntry.replace("gemini-3.1-tts:", "");
+    ttsModel = "gemini-3.1-flash-tts-preview";
+  } else {
+    voiceName = voiceEntry.replace("gemini-tts:", "");
+    ttsModel = "gemini-2.5-flash-preview-tts";
+  }
   const audioPaths: string[] = [];
 
   for (const block of blocks) {
@@ -382,4 +394,132 @@ export async function generateImagesWithGemini(
   }
 
   return imagePaths;
+}
+
+// ─── IMAGE PROMPT ENHANCEMENT ────────────────────────────────────────────────
+// Uses Gemini to improve all 10 image prompts before sending to image generators.
+// Results in dramatically better cinematic imagery.
+export async function enhanceImagePromptsWithGemini(
+  blocks: ScriptBlock[],
+  style: string,
+  topic: string,
+  model: string = "gemini-2.5-flash"
+): Promise<ScriptBlock[]> {
+  const promptsText = blocks.map((b, i) => `BLOCO ${i + 1} (${b.visualType}):\n${b.imagePrompt}`).join("\n\n");
+
+  const enhancePrompt = `You are an elite AI cinematographer and prompt engineer specializing in photorealistic AI image generation.
+
+TOPIC: "${topic}" | STYLE: ${style}
+
+TASK: Rewrite each of the 10 image prompts below to be dramatically more cinematic, specific, and visually powerful. Each improved prompt must:
+1. Include specific camera position (macro, aerial, eye-level, Dutch tilt, etc.)
+2. Include precise lighting (golden hour, neon, volumetric, chiaroscuro, etc.)
+3. Include color palette (deep crimson, teal/orange, monochromatic blues, etc.)
+4. Include atmosphere/mood (thick fog, dust particles, heat haze, rain, etc.)
+5. Include subject detail (textures, materials, scale comparison)
+6. End with: "ultra-sharp 8K, photorealistic, no text, no watermarks"
+7. NEVER repeat the same camera angle as the previous block
+8. Keep under 90 words per prompt
+
+OUTPUT FORMAT — return ONLY this structure:
+ENHANCED_1: [improved prompt for block 1]
+ENHANCED_2: [improved prompt for block 2]
+...
+ENHANCED_10: [improved prompt for block 10]
+
+ORIGINAL PROMPTS TO IMPROVE:
+${promptsText}`;
+
+  try {
+    const resp = await geminiPost(`${model}:generateContent`, {
+      contents: [{ parts: [{ text: enhancePrompt }] }],
+      generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+    }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+
+    const content = resp?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const enhanced = [...blocks];
+
+    for (let i = 0; i < blocks.length; i++) {
+      const match = content.match(new RegExp(`ENHANCED_${i + 1}:\\s*([^\\n]+(?:\\n(?!ENHANCED_\\d)[^\\n]+)*)`, "i"));
+      if (match) {
+        const improved = match[1].trim();
+        if (improved.length > 20) {
+          enhanced[i] = { ...blocks[i], imagePrompt: improved };
+        }
+      }
+    }
+
+    return enhanced;
+  } catch {
+    // If enhancement fails, return original blocks unchanged
+    return blocks;
+  }
+}
+
+// ─── YOUTUBE METADATA GENERATION ─────────────────────────────────────────────
+export interface YouTubeMetadata {
+  titles: string[];
+  description: string;
+  tags: string[];
+  hashtags: string[];
+}
+
+export async function generateYouTubeMetadataWithGemini(
+  blocks: ScriptBlock[],
+  topic: string,
+  style: string,
+  language: string,
+  model: string = "gemini-2.5-flash"
+): Promise<YouTubeMetadata> {
+  const scriptSummary = blocks.slice(0, 5).map((b) => b.text.slice(0, 200)).join(" ");
+
+  const metaPrompt = `You are the world's best YouTube SEO and content strategist, specializing in viral documentary content.
+
+VIDEO TOPIC: "${topic}"
+STYLE: ${style}
+LANGUAGE: ${language}
+SCRIPT PREVIEW: "${scriptSummary}"
+
+Generate COMPLETE YouTube metadata that maximizes clicks, watch time, and algorithm reach.
+
+RETURN ONLY valid JSON with this EXACT structure:
+{
+  "titles": [
+    "TITLE 1 — shocking hook, under 60 chars, no clickbait lies",
+    "TITLE 2 — curiosity gap format",
+    "TITLE 3 — number-based format",
+    "TITLE 4 — question format",
+    "TITLE 5 — secret/hidden/truth format"
+  ],
+  "description": "Complete YouTube description in ${language}, 900-1200 characters. Start with the most compelling hook (no 'bem-vindos'). Include: what the video reveals, why it matters NOW, timestamps placeholder, call to action, channel info. End with relevant keywords naturally embedded.",
+  "tags": ["tag1", "tag2", "tag3"...] (25-30 highly specific tags in ${language} mixing broad and niche),
+  "hashtags": ["#Hashtag1", "#Hashtag2", "#Hashtag3", "#Hashtag4", "#Hashtag5", "#Hashtag6"]
+}`;
+
+  const defaultMeta: YouTubeMetadata = {
+    titles: [`${topic} — O Que Ninguém Te Contou`, `A Verdade Chocante Sobre ${topic}`, topic],
+    description: `Neste vídeo revelamos tudo sobre ${topic}. ${scriptSummary.slice(0, 300)}`,
+    tags: [topic, style, "documentário", "YouTube"],
+    hashtags: [`#${topic.replace(/\s+/g, "")}`, "#Documentário", "#YouTube"],
+  };
+
+  try {
+    const resp = await geminiPost(`${model}:generateContent`, {
+      contents: [{ parts: [{ text: metaPrompt }] }],
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.8, responseMimeType: "application/json" },
+    }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+
+    const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+    const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const parsed = JSON.parse(clean) as Partial<YouTubeMetadata>;
+
+    return {
+      titles: Array.isArray(parsed.titles) && parsed.titles.length > 0 ? parsed.titles : defaultMeta.titles,
+      description: typeof parsed.description === "string" && parsed.description.length > 50 ? parsed.description : defaultMeta.description,
+      tags: Array.isArray(parsed.tags) && parsed.tags.length > 0 ? parsed.tags : defaultMeta.tags,
+      hashtags: Array.isArray(parsed.hashtags) && parsed.hashtags.length > 0 ? parsed.hashtags : defaultMeta.hashtags,
+    };
+  } catch {
+    return defaultMeta;
+  }
 }

@@ -17,6 +17,8 @@ import {
   generateScriptWithGemini,
   generateAudioWithGemini,
   generateImagesWithGemini,
+  enhanceImagePromptsWithGemini,
+  generateYouTubeMetadataWithGemini,
 } from "../../lib/video/geminiGenerator.js";
 import {
   mergeAudios,
@@ -40,6 +42,10 @@ async function updateVideo(
     progress: number;
     errorMessage: string | null;
     outputPath: string | null;
+    youtubeTitles: string | null;
+    youtubeDescription: string | null;
+    youtubeTags: string | null;
+    youtubeHashtags: string | null;
   }>
 ): Promise<void> {
   await db
@@ -161,10 +167,28 @@ router.post("/videos/:id/generate", async (req, res) => {
     sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
     await updateVideo(id, { progress: 15 });
 
+    // ─── METADATA (parallel, fire-and-forget with result) ─────────────────────
+    if (USE_GEMINI) {
+      sendEvent("script", "🎯 Gerando metadados YouTube com Gemini...", 15);
+      generateYouTubeMetadataWithGemini(blocks, video.topic, video.style, video.language, scriptModel)
+        .then(async (meta) => {
+          await updateVideo(id, {
+            youtubeTitles: JSON.stringify(meta.titles),
+            youtubeDescription: meta.description,
+            youtubeTags: JSON.stringify(meta.tags),
+            youtubeHashtags: JSON.stringify(meta.hashtags),
+          });
+        })
+        .catch(() => { /* non-fatal */ });
+    }
+
     // ─── STEP 2: AUDIO ────────────────────────────────────────────────────────
-    const isElevenLabs = USE_ELEVENLABS && video.voice.length > 20 && !video.voice.startsWith("gemini-tts:");
-    const isGeminiTts  = USE_GEMINI && video.voice.startsWith("gemini-tts:");
-    const audioLabel   = isGeminiTts ? "Google Gemini TTS" : isElevenLabs ? "ElevenLabs" : "OpenAI TTS";
+    const isElevenLabs = USE_ELEVENLABS && video.voice.length > 20 &&
+      !video.voice.startsWith("gemini-tts:") && !video.voice.startsWith("gemini-3.1-tts:");
+    const isGeminiTts = USE_GEMINI &&
+      (video.voice.startsWith("gemini-tts:") || video.voice.startsWith("gemini-3.1-tts:"));
+    const ttsModelLabel = video.voice.startsWith("gemini-3.1-tts:") ? "Gemini 3.1 Flash TTS" : "Gemini 2.5 Flash TTS";
+    const audioLabel   = isGeminiTts ? ttsModelLabel : isElevenLabs ? "ElevenLabs" : "OpenAI TTS";
 
     sendEvent("audio", `🎙️ Gerando áudios com ${audioLabel}...`, 18);
     await updateVideo(id, { status: "generating_audio", progress: 18 });
@@ -192,6 +216,15 @@ router.post("/videos/:id/generate", async (req, res) => {
     // ─── STEP 3: IMAGES ───────────────────────────────────────────────────────
     const imageModel = video.imageModel ?? "flux-realism";
     const useGeminiImg = USE_GEMINI && (imageModel.startsWith("gemini-") || imageModel.startsWith("nano-"));
+
+    // Enhance image prompts with Gemini before any image generation
+    if (USE_GEMINI) {
+      sendEvent("images", "✨ Aprimorando prompts de imagem com Gemini...", 36);
+      try {
+        blocks = await enhanceImagePromptsWithGemini(blocks, video.style, video.topic, scriptModel);
+        sendEvent("images", "Prompts cinematográficos aprimorados.", 37);
+      } catch { /* non-fatal, use original prompts */ }
+    }
 
     let imagePaths: string[];
 

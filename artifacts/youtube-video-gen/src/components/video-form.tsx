@@ -95,14 +95,24 @@ const ELEVENLABS_VOICES = [
 ];
 
 const GEMINI_TTS_VOICES = [
-  { id: "gemini-tts:Kore",   name: "Kore",   desc: "Firme e Expressivo" },
-  { id: "gemini-tts:Fenrir", name: "Fenrir", desc: "Entusiasmado" },
-  { id: "gemini-tts:Charon", name: "Charon", desc: "Informativo e Sério" },
-  { id: "gemini-tts:Puck",   name: "Puck",   desc: "Animado e Vibrante" },
-  { id: "gemini-tts:Orus",   name: "Orus",   desc: "Firme e Autoritário" },
-  { id: "gemini-tts:Aoede",  name: "Aoede",  desc: "Suave e Tranquilo" },
-  { id: "gemini-tts:Leda",   name: "Leda",   desc: "Jovem e Caloroso" },
-  { id: "gemini-tts:Zephyr", name: "Zephyr", desc: "Brilhante e Claro" },
+  { id: "gemini-tts:Kore",        name: "Kore",        desc: "2.5 Flash — Firme, Expressivo" },
+  { id: "gemini-tts:Fenrir",      name: "Fenrir",      desc: "2.5 Flash — Entusiasmado" },
+  { id: "gemini-tts:Charon",      name: "Charon",      desc: "2.5 Flash — Informativo, Sério" },
+  { id: "gemini-tts:Puck",        name: "Puck",        desc: "2.5 Flash — Animado, Vibrante" },
+  { id: "gemini-tts:Orus",        name: "Orus",        desc: "2.5 Flash — Firme, Autoritário" },
+  { id: "gemini-tts:Aoede",       name: "Aoede",       desc: "2.5 Flash — Suave, Tranquilo" },
+  { id: "gemini-tts:Leda",        name: "Leda",        desc: "2.5 Flash — Jovem, Caloroso" },
+  { id: "gemini-tts:Zephyr",      name: "Zephyr",      desc: "2.5 Flash — Brilhante, Claro" },
+  { id: "gemini-3.1-tts:Kore",    name: "Kore 3.1",    desc: "3.1 Flash — Firme, Expressivo" },
+  { id: "gemini-3.1-tts:Fenrir",  name: "Fenrir 3.1",  desc: "3.1 Flash — Entusiasmado" },
+  { id: "gemini-3.1-tts:Charon",  name: "Charon 3.1",  desc: "3.1 Flash — Informativo" },
+  { id: "gemini-3.1-tts:Puck",    name: "Puck 3.1",    desc: "3.1 Flash — Animado" },
+  { id: "gemini-3.1-tts:Algieba", name: "Algieba",     desc: "3.1 Flash — Grave, Intenso ★" },
+  { id: "gemini-3.1-tts:Callirrhoe", name: "Callirrhoe", desc: "3.1 Flash — Melodioso ★" },
+  { id: "gemini-3.1-tts:Despina", name: "Despina",     desc: "3.1 Flash — Expressivo ★" },
+  { id: "gemini-3.1-tts:Alnilam", name: "Alnilam",     desc: "3.1 Flash — Profundo ★" },
+  { id: "gemini-3.1-tts:Iapetus", name: "Iapetus",     desc: "3.1 Flash — Dramático ★" },
+  { id: "gemini-3.1-tts:Rasalgethi", name: "Rasalgethi", desc: "3.1 Flash — Épico ★" },
 ];
 
 const OPENAI_VOICES = [

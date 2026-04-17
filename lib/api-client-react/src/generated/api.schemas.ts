@@ -45,6 +45,14 @@ export interface Video {
   scriptModel?: string;
   imageModel?: string;
   videoModel?: string;
+  /** JSON array string of 5 YouTube title options */
+  youtubeTitles?: string;
+  /** SEO-optimized YouTube description (800-1200 chars) */
+  youtubeDescription?: string;
+  /** JSON array string of 20-30 YouTube tags */
+  youtubeTags?: string;
+  /** JSON array string of 5-8 hashtags */
+  youtubeHashtags?: string;
   /** pending | generating_script | generating_audio | generating_images | assembling_video | done | error */
   status: string;
   /** Progress percentage 0-100 */

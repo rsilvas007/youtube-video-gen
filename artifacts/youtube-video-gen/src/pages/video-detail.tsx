@@ -4,7 +4,7 @@ import { useGetVideo, getGetVideoQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Play, Download, Terminal, CheckCircle2, AlertCircle, Loader2, Clock } from "lucide-react";
+import { ArrowLeft, Play, Download, Terminal, CheckCircle2, AlertCircle, Loader2, Clock, Copy, Check, Youtube, Hash, Tag } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -36,6 +36,14 @@ export default function VideoDetail() {
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1500);
+    });
+  };
 
   // Poll sempre, independente de estar gerando ou não
   const { data: video, isLoading } = useGetVideo(videoId, {
@@ -328,6 +336,130 @@ export default function VideoDetail() {
 
             <div className="absolute bottom-[-100px] right-[-100px] w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
           </Card>
+
+          {/* ─── YOUTUBE METADATA ──────────────────────────────────────────────── */}
+          {video && (video.youtubeTitles || video.youtubeDescription) && (
+            <Card className="mt-4 bg-card border-border/50 overflow-hidden">
+              <div className="p-4 border-b border-border/50 flex items-center gap-2">
+                <Youtube className="w-4 h-4 text-red-500" />
+                <span className="text-sm font-semibold">METADADOS YOUTUBE</span>
+              </div>
+
+              <div className="p-5 space-y-6">
+                {/* TITLES */}
+                {video.youtubeTitles && (() => {
+                  let titles: string[] = [];
+                  try { titles = JSON.parse(video.youtubeTitles); } catch { titles = [video.youtubeTitles]; }
+                  return (
+                    <div>
+                      <p className="text-xs font-mono text-muted-foreground mb-2 uppercase tracking-wider">📌 Títulos Sugeridos</p>
+                      <div className="space-y-2">
+                        {titles.map((title, i) => (
+                          <div key={i} className="flex items-center gap-2 group">
+                            <span className="text-xs text-muted-foreground/50 font-mono w-4">{i + 1}.</span>
+                            <span className="flex-1 text-sm leading-relaxed">{title}</span>
+                            <button
+                              onClick={() => copyToClipboard(title, `title-${i}`)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-primary"
+                            >
+                              {copiedKey === `title-${i}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* DESCRIPTION */}
+                {video.youtubeDescription && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">📝 Descrição</p>
+                      <button
+                        onClick={() => copyToClipboard(video.youtubeDescription!, "desc")}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        {copiedKey === "desc" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        {copiedKey === "desc" ? "Copiado!" : "Copiar"}
+                      </button>
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-3 text-xs leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto text-foreground/80 font-mono border border-border/30">
+                      {video.youtubeDescription}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAGS */}
+                {video.youtubeTags && (() => {
+                  let tags: string[] = [];
+                  try { tags = JSON.parse(video.youtubeTags); } catch { tags = [video.youtubeTags]; }
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                          <Tag className="w-3 h-3" /> Tags ({tags.length})
+                        </p>
+                        <button
+                          onClick={() => copyToClipboard(tags.join(", "), "tags")}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          {copiedKey === "tags" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          {copiedKey === "tags" ? "Copiado!" : "Copiar tudo"}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {tags.map((tag, i) => (
+                          <span
+                            key={i}
+                            className="text-xs px-2 py-0.5 bg-primary/10 border border-primary/20 text-primary rounded-full cursor-pointer hover:bg-primary/20 transition-colors"
+                            onClick={() => copyToClipboard(tag, `tag-${i}`)}
+                            title="Clique para copiar"
+                          >
+                            {copiedKey === `tag-${i}` ? "✓" : tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* HASHTAGS */}
+                {video.youtubeHashtags && (() => {
+                  let hashtags: string[] = [];
+                  try { hashtags = JSON.parse(video.youtubeHashtags); } catch { hashtags = [video.youtubeHashtags]; }
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                          <Hash className="w-3 h-3" /> Hashtags
+                        </p>
+                        <button
+                          onClick={() => copyToClipboard(hashtags.join(" "), "hashtags")}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          {copiedKey === "hashtags" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          {copiedKey === "hashtags" ? "Copiado!" : "Copiar tudo"}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {hashtags.map((ht, i) => (
+                          <span
+                            key={i}
+                            className="text-xs px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full cursor-pointer hover:bg-blue-500/20 transition-colors"
+                            onClick={() => copyToClipboard(ht, `ht-${i}`)}
+                            title="Clique para copiar"
+                          >
+                            {copiedKey === `ht-${i}` ? "✓" : ht}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>
