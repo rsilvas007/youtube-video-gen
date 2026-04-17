@@ -15,6 +15,7 @@ import {
   assembleVideo,
 } from "../../lib/video/videoAssembler.js";
 
+
 const router = Router();
 const USE_RUNWAY = !!process.env.RUNWAY_API_KEY;
 
@@ -207,18 +208,16 @@ router.post("/videos/:id/generate", async (req, res) => {
       } else {
         sendEvent("video", "⚠️ Runway indisponível, usando animação de imagens...", 88);
         await updateVideo(id, { status: "assembling_video", progress: 88 });
-        const secondsPerImage = Math.max(6, Math.round((video.durationMinutes * 60) / blocks.length));
-        await assembleVideo(imagePaths, fullAudioPath, outputVideoPath, secondsPerImage);
+        await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
       }
     } else {
-      sendEvent("video", "Mesclando áudios...", 60);
+      sendEvent("video", "Mesclando áudios e sincronizando imagens...", 60);
       await updateVideo(id, { status: "assembling_video", progress: 60 });
 
-      sendEvent("video", "Montando vídeo com animações dinâmicas...", 70);
+      sendEvent("video", "Montando vídeo com animações sincronizadas ao áudio...", 70);
       await updateVideo(id, { progress: 70 });
 
-      const secondsPerImage = Math.max(6, Math.round((video.durationMinutes * 60) / blocks.length));
-      await assembleVideo(imagePaths, fullAudioPath, outputVideoPath, secondsPerImage);
+      await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
     }
 
     sendEvent("video", "Vídeo montado com sucesso!", 95);

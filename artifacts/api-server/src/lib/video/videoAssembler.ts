@@ -25,6 +25,38 @@ function runFFmpeg(args: string[]): Promise<void> {
   });
 }
 
+function runFFprobe(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("ffprobe", [
+      "-v", "error",
+      "-show_entries", "format=duration",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      filePath,
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+
+    let stdout = "";
+    proc.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        resolve(30);
+      } else {
+        const duration = parseFloat(stdout.trim());
+        resolve(isNaN(duration) ? 30 : duration);
+      }
+    });
+    proc.on("error", () => resolve(30));
+  });
+}
+
+export async function getAudioDurations(audioPaths: string[]): Promise<number[]> {
+  const durations: number[] = [];
+  for (const p of audioPaths) {
+    const dur = await runFFprobe(p);
+    durations.push(dur);
+  }
+  return durations;
+}
+
 export async function mergeAudios(
   audioPaths: string[],
   outputDir: string
@@ -95,28 +127,27 @@ export async function assembleFromClips(
 
 export async function assembleVideo(
   imagePaths: string[],
+  audioPaths: string[],
   fullAudioPath: string,
   outputPath: string,
-  secondsPerImage: number = 8
 ): Promise<void> {
   const outputDir = path.dirname(outputPath);
   fs.mkdirSync(outputDir, { recursive: true });
 
   const n = imagePaths.length;
   const fps = 25;
-  const d = secondsPerImage * fps;
 
   const zoompanVariants = [
-    `zoompan=z='min(zoom+0.0010,1.4)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
-    `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.0010))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
-    `zoompan=z='min(zoom+0.0008,1.3)':x='iw/2-(iw/zoom/2)+sin(on/${fps})*20':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
-    `zoompan=z='min(zoom+0.0010,1.35)':x='0':y='0':d=${d}:s=1280x720`,
-    `zoompan=z='min(zoom+0.0008,1.3)':x='iw-iw/zoom':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
-    `zoompan=z='min(zoom+0.0012,1.45)':x='iw/2-(iw/zoom/2)':y='0':d=${d}:s=1280x720`,
-    `zoompan=z='1.3':x='iw/2-(iw/zoom/2)+cos(on/${fps})*15':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
-    `zoompan=z='min(zoom+0.0006,1.25)':x='iw-(iw/zoom)':y='ih-(ih/zoom)':d=${d}:s=1280x720`,
-    `zoompan=z='if(lte(zoom,1.0),1.4,max(1.001,zoom-0.0012))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
-    `zoompan=z='min(zoom+0.0009,1.35)':x='iw/2-(iw/zoom/2)':y='ih-(ih/zoom)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0010,1.4)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.0010))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0008,1.3)':x='iw/2-(iw/zoom/2)+sin(on/${fps})*20':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0010,1.35)':x='0':y='0':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0008,1.3)':x='iw-iw/zoom':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0012,1.45)':x='iw/2-(iw/zoom/2)':y='0':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='1.3':x='iw/2-(iw/zoom/2)+cos(on/${fps})*15':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0006,1.25)':x='iw-(iw/zoom)':y='ih-(ih/zoom)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='if(lte(zoom,1.0),1.4,max(1.001,zoom-0.0012))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=1280x720`,
+    (d: number) => `zoompan=z='min(zoom+0.0009,1.35)':x='iw/2-(iw/zoom/2)':y='ih-(ih/zoom)':d=${d}:s=1280x720`,
   ];
 
   const tempClipPaths: string[] = [];
@@ -124,7 +155,10 @@ export async function assembleVideo(
   for (let i = 0; i < n; i++) {
     const imgPath = imagePaths[i];
     const clipPath = path.join(outputDir, `img_clip_${String(i).padStart(2, "0")}.mp4`);
-    const variant = zoompanVariants[i % zoompanVariants.length];
+
+    const blockDuration = await runFFprobe(audioPaths[i]);
+    const d = Math.ceil(blockDuration * fps);
+    const variant = zoompanVariants[i % zoompanVariants.length](d);
 
     await runFFmpeg([
       "-y",
@@ -136,7 +170,7 @@ export async function assembleVideo(
       "-crf", "23",
       "-pix_fmt", "yuv420p",
       "-r", String(fps),
-      "-t", String(secondsPerImage),
+      "-t", String(blockDuration),
       clipPath,
     ]);
     tempClipPaths.push(clipPath);
