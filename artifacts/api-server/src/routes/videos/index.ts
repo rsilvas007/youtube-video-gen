@@ -287,15 +287,29 @@ router.post("/videos/:id/generate", async (req, res) => {
     if (useGeminiImg) {
       sendEvent("images", `🖼️ Gerando imagens com Google ${imageModel}...`, 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
-      imagePaths = await generateImagesWithGemini(blocks, imagesDir, video.style, imageModel);
+      try {
+        imagePaths = await generateImagesWithGemini(blocks, imagesDir, video.style, imageModel);
+      } catch (geminiImgErr) {
+        const errMsg = geminiImgErr instanceof Error ? geminiImgErr.message : String(geminiImgErr);
+        const is429 = errMsg.includes("429");
+        sendEvent("images",
+          is429
+            ? "⚠️ Quota Gemini esgotada — usando Pollinations como fallback..."
+            : `⚠️ Gemini imagem falhou — usando Pollinations como fallback...`,
+          37
+        );
+        const fallbackModel = "flux-realism";
+        imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, fallbackModel);
+      }
     } else if (USE_POLLINATIONS) {
       sendEvent("images", `🎨 Gerando imagens com Pollinations (${imageModel})...`, 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
       imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, imageModel);
     } else {
-      sendEvent("images", "Gerando imagens com OpenAI...", 37);
+      // Last resort: Pollinations with default model
+      sendEvent("images", "🎨 Gerando imagens com Pollinations...", 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
-      imagePaths = await generateImages(blocks, imagesDir, video.style);
+      imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, "flux-realism");
     }
 
     for (let i = 0; i < imagePaths.length; i++) {

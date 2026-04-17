@@ -366,8 +366,9 @@ export async function generateImagesWithGemini(
 
     let attempts = 0;
     let lastError: Error | null = null;
+    const MAX_ATTEMPTS = 4;
 
-    while (attempts < 3) {
+    while (attempts < MAX_ATTEMPTS) {
       try {
         const resp = await geminiPost(`${imageModel}:generateContent`, {
           contents: [{ parts: [{ text: prompt }] }],
@@ -388,7 +389,12 @@ export async function generateImagesWithGemini(
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         attempts++;
-        if (attempts < 3) await new Promise((r) => setTimeout(r, 4000 * attempts));
+        if (attempts < MAX_ATTEMPTS) {
+          // 429 quota: wait much longer before retrying (30s, 60s, 90s)
+          const is429 = lastError.message.includes("429");
+          const delay = is429 ? 30_000 * attempts : 5_000 * attempts;
+          await new Promise((r) => setTimeout(r, delay));
+        }
       }
     }
 
