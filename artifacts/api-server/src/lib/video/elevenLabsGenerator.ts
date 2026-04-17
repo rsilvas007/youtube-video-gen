@@ -106,55 +106,76 @@ function postToFile(
   });
 }
 
+// FIX C-02: runConcurrent com limite 2 (não Promise.all irrestrito) + callback SSE
+async function runConcurrent<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
+}
+
 export async function generateAudioWithElevenLabs(
   blocks: ScriptBlock[],
   audioDir: string,
-  voiceId: string
+  voiceId: string,
+  onBlockDone?: (blockIndex: number, total: number) => void  // FIX A-01: callback SSE
 ): Promise<string[]> {
   fs.mkdirSync(audioDir, { recursive: true });
 
-  // Generate all blocks in parallel — ElevenLabs handles concurrent requests well
-  await Promise.all(
-    blocks.map(async (block) => {
-      const outputPath = path.join(
-        audioDir,
-        `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`
-      );
-      const settings = BLOCK_VOICE_SETTINGS[block.blockNumber] ?? DEFAULT_VOICE_SETTINGS;
-      const requestBody = {
-        text: block.text,
-        model_id: MODEL_ID,
-        voice_settings: {
-          stability: settings.stability,
-          similarity_boost: settings.similarity_boost,
-          style: settings.style,
-          use_speaker_boost: settings.use_speaker_boost,
-          speed: settings.speed,
-        },
-      };
+  const tasks = blocks.map((block, taskIdx) => async () => {
+    const outputPath = path.join(
+      audioDir,
+      `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`
+    );
+    const settings = BLOCK_VOICE_SETTINGS[block.blockNumber] ?? DEFAULT_VOICE_SETTINGS;
+    const requestBody = {
+      text: block.text,
+      model_id: MODEL_ID,
+      voice_settings: {
+        stability: settings.stability,
+        similarity_boost: settings.similarity_boost,
+        style: settings.style,
+        use_speaker_boost: settings.use_speaker_boost,
+        speed: settings.speed,
+      },
+    };
 
-      let attempts = 0;
-      let lastError: Error | null = null;
-      while (attempts < 3) {
-        try {
-          await postToFile(
-            `/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-            requestBody,
-            outputPath
-          );
-          const stat = fs.statSync(outputPath);
-          if (stat.size < 1000) throw new Error(`Audio too small (${stat.size} bytes)`);
-          lastError = null;
-          break;
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          attempts++;
-          if (attempts < 3) await new Promise((r) => setTimeout(r, 2000 * attempts));
-        }
+    let attempts = 0;
+    let lastError: Error | null = null;
+    while (attempts < 3) {
+      try {
+        await postToFile(
+          `/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+          requestBody,
+          outputPath
+        );
+        const stat = fs.statSync(outputPath);
+        if (stat.size < 1000) throw new Error(`Audio too small (${stat.size} bytes)`);
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        attempts++;
+        if (attempts < 3) await new Promise((r) => setTimeout(r, 2000 * attempts));
       }
-      if (lastError) throw lastError;
-    })
-  );
+    }
+    if (lastError) throw lastError;
+
+    // FIX A-01: notificar progresso por bloco concluído
+    if (onBlockDone) onBlockDone(taskIdx, blocks.length);
+  });
+
+  // FIX C-02: máx 2 concorrentes — evita rate limit do ElevenLabs
+  await runConcurrent(tasks, 2);
 
   // Return paths in block order
   return blocks.map((b) =>

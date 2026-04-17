@@ -89,6 +89,23 @@ function fetchToFile(
   });
 }
 
+// FIX M-02: runConcurrent com limite 3 — evita rate limit do Pollinations
+async function runConcurrent<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
+}
+
 export async function generatePollinationsImages(
   blocks: ScriptBlock[],
   imagesDir: string,
@@ -114,46 +131,46 @@ export async function generatePollinationsImages(
     ? /tech|tecnolog|explainer|network|data|digital|modern|cinematic documentary/i.test(style)
     : false;
 
-  // Generate all images in parallel
-  await Promise.all(
-    blocks.map(async (block, i) => {
-      const styleSuffix = STYLE_SUFFIXES[i % STYLE_SUFFIXES.length];
-      const techBoost = isTech
-        ? "glowing neon accents, dark cinematic background, holographic elements, tech documentary,"
-        : "";
-      const cameraHint = block.cameraMovement ? `Camera: ${block.cameraMovement}.` : "";
+  // FIX M-02: máx 3 concorrentes (não Promise.all ilimitado)
+  const tasks = blocks.map((block, i) => async () => {
+    const styleSuffix = STYLE_SUFFIXES[i % STYLE_SUFFIXES.length];
+    const techBoost = isTech
+      ? "glowing neon accents, dark cinematic background, holographic elements, tech documentary,"
+      : "";
+    const cameraHint = block.cameraMovement ? `Camera: ${block.cameraMovement}.` : "";
 
-      const fullPrompt = [
-        block.imagePrompt,
-        techBoost,
-        cameraHint,
-        styleSuffix,
-        "NO text, NO watermark, NO logo",
-      ]
-        .filter(Boolean)
-        .join(" ");
+    const fullPrompt = [
+      block.imagePrompt,
+      techBoost,
+      cameraHint,
+      styleSuffix,
+      "NO text, NO watermark, NO logo",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-      const model = imageModel || IMAGE_MODELS[i % IMAGE_MODELS.length];
-      const encoded = encodeURIComponent(fullPrompt);
-      const url = `https://${BASE_URL}/image/${encoded}?width=1536&height=1024&model=${model}&nologo=true`;
-      const outputPath = path.join(imagesDir, `img_${String(block.blockNumber).padStart(2, "0")}.jpg`);
+    const model = imageModel || IMAGE_MODELS[i % IMAGE_MODELS.length];
+    const encoded = encodeURIComponent(fullPrompt);
+    const url = `https://${BASE_URL}/image/${encoded}?width=1536&height=1024&model=${model}&nologo=true`;
+    const outputPath = path.join(imagesDir, `img_${String(block.blockNumber).padStart(2, "0")}.jpg`);
 
-      let attempts = 0;
-      let lastError: Error | null = null;
-      while (attempts < 3) {
-        try {
-          await fetchToFile(url, outputPath, 90_000);
-          lastError = null;
-          break;
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          attempts++;
-          if (attempts < 3) await new Promise((r) => setTimeout(r, 2000 * attempts));
-        }
+    let attempts = 0;
+    let lastError: Error | null = null;
+    while (attempts < 3) {
+      try {
+        await fetchToFile(url, outputPath, 90_000);
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        attempts++;
+        if (attempts < 3) await new Promise((r) => setTimeout(r, 2000 * attempts));
       }
-      if (lastError) throw lastError;
-    })
-  );
+    }
+    if (lastError) throw lastError;
+  });
+
+  await runConcurrent(tasks, 3);
 
   // Return paths in block order
   return blocks.map((b) =>

@@ -118,12 +118,22 @@ export default function VideoDetail() {
                   progress: data.progress || 0
                 }]);
 
+                // FIX M-04: mapear step SSE para status do banco
+                const stepToStatus: Record<string, string> = {
+                  script: "generating_script",
+                  audio: "generating_audio",
+                  images: "generating_images",
+                  video: "generating_clips",
+                  subtitles: "assembling_video",
+                  done: "done",
+                  error: "error",
+                };
                 queryClient.setQueryData(getGetVideoQueryKey(videoId), (old: any) => {
                   if (!old) return old;
                   return {
                     ...old,
                     progress: data.progress ?? old.progress,
-                    status: data.step === "done" ? "done" : data.step === "error" ? "error" : data.step || old.status,
+                    status: stepToStatus[data.step] ?? old.status,
                   };
                 });
 

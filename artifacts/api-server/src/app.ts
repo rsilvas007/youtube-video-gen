@@ -6,6 +6,9 @@ import { db } from "@workspace/db";
 import { videosTable } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 const app: Express = express();
 
@@ -44,6 +47,14 @@ async function resetStuckJobs(): Promise<void> {
       .where(like(videosTable.status, "generating_%"));
 
     if (stuck.length > 0) {
+      // FIX L-01: limpar workDir temporário para evitar arquivos parciais na re-geração
+      for (const job of stuck) {
+        const workDir = path.join(os.tmpdir(), "yt-video-gen", String(job.id));
+        try {
+          if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
+        } catch { /* non-fatal */ }
+      }
+
       await db
         .update(videosTable)
         .set({

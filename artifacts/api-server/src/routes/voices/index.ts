@@ -1,6 +1,6 @@
 import { Router } from "express";
 import https from "https";
-import { execSync } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -65,25 +65,23 @@ async function geminiTTSPreview(voiceEntry: string): Promise<Buffer> {
 
           fs.writeFileSync(rawPath, rawBuf);
 
-          try {
-            if (mimeType.includes("pcm") || mimeType.includes("l16")) {
-              execSync(
-                `ffmpeg -y -f s16le -ar 24000 -ac 1 -i "${rawPath}" -ar 44100 -ac 1 -b:a 128k "${mp3Path}" 2>/dev/null`,
-                { timeout: 20000 }
-              );
-            } else {
-              execSync(
-                `ffmpeg -y -i "${rawPath}" -ar 44100 -ac 1 -b:a 128k "${mp3Path}" 2>/dev/null`,
-                { timeout: 20000 }
-              );
-            }
-            const mp3Buf = fs.readFileSync(mp3Path);
-            try { fs.unlinkSync(rawPath); fs.unlinkSync(mp3Path); } catch { /* ignore */ }
-            resolve(mp3Buf);
-          } catch {
-            try { fs.unlinkSync(rawPath); } catch { /* ignore */ }
-            resolve(rawBuf);
-          }
+          // FIX L-02: usar spawn assíncrono — evita bloquear o event loop do Node
+          const ffmpegArgs = (mimeType.includes("pcm") || mimeType.includes("l16"))
+            ? ["-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", rawPath, "-ar", "44100", "-ac", "1", "-b:a", "128k", mp3Path]
+            : ["-y", "-i", rawPath, "-ar", "44100", "-ac", "1", "-b:a", "128k", mp3Path];
+
+          await new Promise<void>((resolveConv, rejectConv) => {
+            const proc = spawn("ffmpeg", ffmpegArgs, { stdio: ["ignore", "pipe", "pipe"] });
+            proc.on("close", (code) => {
+              if (code === 0) resolveConv();
+              else rejectConv(new Error(`ffmpeg exit ${code}`));
+            });
+            proc.on("error", rejectConv);
+          });
+
+          const mp3Buf = fs.readFileSync(mp3Path);
+          try { fs.unlinkSync(rawPath); fs.unlinkSync(mp3Path); } catch { /* ignore */ }
+          resolve(mp3Buf);
         } catch (err) {
           reject(err);
         }

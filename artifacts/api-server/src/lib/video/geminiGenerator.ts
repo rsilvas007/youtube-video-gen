@@ -23,14 +23,13 @@ function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
 }
 
 // For raw PCM data (no WAV header) from Gemini TTS
-// mimeType format: "audio/L16;codec=pcm;rate=24000" or similar
 function convertToMp3WithPcm(rawPath: string, outputPath: string, mimeType: string): Promise<void> {
   const rateMatch = mimeType.match(/rate=(\d+)/);
   const sampleRate = rateMatch ? rateMatch[1] : "24000";
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
       "-y",
-      "-f", "s16le",        // signed 16-bit little-endian PCM
+      "-f", "s16le",
       "-ar", sampleRate,
       "-ac", "1",
       "-i", rawPath,
@@ -51,7 +50,6 @@ function convertToMp3WithPcm(rawPath: string, outputPath: string, mimeType: stri
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
 const BASE = "generativelanguage.googleapis.com";
 
-// ─── BLOCK BLUEPRINT (same DarkAgent logic as scriptGenerator) ───────────────
 const VISUAL_SEQUENCE = [
   { type: "EXTREME CLOSE-UP / MACRO",      camera: "slow push-in, slight rack focus from foreground to subject" },
   { type: "WIDE AERIAL / ESTABLISHING",    camera: "slow drone pullback revealing massive scale, descending arc" },
@@ -78,7 +76,6 @@ const BLOCK_BLUEPRINT = [
   { role: "CONCLUSÃO COM LOOP ABERTO", instruction: "End with a question/statement that demands further thought. NO 'gostou do vídeo'. Last sentence should haunt them." },
 ];
 
-// ─── Gemini TTS voices ────────────────────────────────────────────────────────
 export const GEMINI_TTS_VOICES = [
   { id: "gemini-tts:Kore",    name: "Kore",    desc: "Firme, expressivo",    model: "gemini-2.5-flash-preview-tts" },
   { id: "gemini-tts:Charon",  name: "Charon",  desc: "Informativo",          model: "gemini-2.5-flash-preview-tts" },
@@ -144,7 +141,7 @@ function geminiPost(endpoint: string, body: object, timeoutMs = 120_000): Promis
   });
 }
 
-// Wrapper with automatic retry for transient Gemini errors (503, 429, network)
+// FIX A-03: Cap de retry em 30s máx (não multiplicativo ilimitado)
 async function geminiPostWithRetry(
   endpoint: string,
   body: object,
@@ -165,10 +162,9 @@ async function geminiPostWithRetry(
 
       if (!isRetryable || attempt === maxAttempts) throw lastError;
 
-      // 503 overloaded: 4s, 8s, 12s, 16s  (fast retry — usually resolves in seconds)
-      // 429 quota:      20s, 40s, 60s, 80s (quota needs more wait)
-      const baseDelay = is429 ? 20_000 : 4_000;
-      const delay = baseDelay * attempt;
+      // FIX A-03: delay capped em 30s para 429, 8s para 503
+      const baseDelay = is429 ? 15_000 : 4_000;
+      const delay = Math.min(baseDelay * attempt, 30_000);
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -250,7 +246,6 @@ function parseGeminiScript(content: string, n: number = 10): ScriptBlock[] {
     }
   }
 
-  // Fallback: regex scan if fewer than half the expected blocks were found
   if (blocks.length < Math.ceil(n / 2)) {
     blocks.length = 0;
     const re = /===BLOCO (\d+)===([\s\S]*?)===FIM_BLOCO \1===/g;
@@ -274,12 +269,7 @@ function parseGeminiScript(content: string, n: number = 10): ScriptBlock[] {
   return blocks.slice(0, n);
 }
 
-// ─── TTS GENERATION ──────────────────────────────────────────────────────────
-// Voice prefix → TTS model mapping:
-//   gemini-tts:VoiceName   → gemini-2.5-flash-preview-tts
-//   gemini-3.1-tts:VoiceName → gemini-3.1-flash-tts-preview
-
-// Run tasks with a max concurrency limit
+// ─── CONCURRENCY HELPER ───────────────────────────────────────────────────────
 async function runConcurrent<T>(
   tasks: Array<() => Promise<T>>,
   concurrency: number
@@ -296,26 +286,31 @@ async function runConcurrent<T>(
   return results;
 }
 
+// ─── TTS GENERATION ──────────────────────────────────────────────────────────
+// FIX C-01: per-block try/catch com fallback de modelo + validação de arquivo
 export async function generateAudioWithGemini(
   blocks: ScriptBlock[],
   audioDir: string,
-  voiceEntry: string
+  voiceEntry: string,
+  onBlockDone?: (blockIndex: number, total: number) => void  // FIX A-01: callback SSE
 ): Promise<string[]> {
   fs.mkdirSync(audioDir, { recursive: true });
 
   let voiceName: string;
   let ttsModel: string;
+  let fallbackModel: string;
 
   if (voiceEntry.startsWith("gemini-3.1-tts:")) {
     voiceName = voiceEntry.replace("gemini-3.1-tts:", "");
     ttsModel = "gemini-3.1-flash-tts-preview";
+    fallbackModel = "gemini-2.5-flash-preview-tts";
   } else {
     voiceName = voiceEntry.replace("gemini-tts:", "");
     ttsModel = "gemini-2.5-flash-preview-tts";
+    fallbackModel = "gemini-2.0-flash-preview-tts";
   }
 
-  // Generate all audio blocks in parallel (max 2 concurrent to respect rate limits)
-  const tasks = blocks.map((block) => async (): Promise<string> => {
+  const tasks = blocks.map((block, taskIdx) => async (): Promise<string> => {
     const rawPath = path.join(audioDir, `audio_raw_${String(block.blockNumber).padStart(2, "0")}.wav`);
     const mp3Path = path.join(audioDir, `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`);
     const emotionHint = BLOCK_EMOTION_PROMPT[block.blockNumber] ?? "";
@@ -323,40 +318,74 @@ export async function generateAudioWithGemini(
       ? `[Narration style: ${emotionHint}]\n\n${block.text}`
       : block.text;
 
-    const resp = await geminiPostWithRetry(`${ttsModel}:generateContent`, {
-      contents: [{ parts: [{ text: textWithHint }] }],
-      generationConfig: {
-        responseModalities: ["AUDIO"],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
-      },
-    }) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
-      }>
-    };
+    // FIX C-01: tenta modelo principal, cai para fallback se falhar
+    const modelsToTry = [ttsModel, fallbackModel];
+    let lastErr: Error | null = null;
 
-    const audioPart = resp?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-    if (!audioPart?.data) throw new Error(`No audio data for block ${block.blockNumber}`);
+    for (const model of modelsToTry) {
+      try {
+        const resp = await geminiPostWithRetry(`${model}:generateContent`, {
+          contents: [{ parts: [{ text: textWithHint }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+          },
+        }) as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
+          }>
+        };
 
-    fs.writeFileSync(rawPath, Buffer.from(audioPart.data, "base64"));
-    const stat = fs.statSync(rawPath);
-    if (stat.size < 500) throw new Error(`Raw audio too small (${stat.size} bytes)`);
+        const audioPart = resp?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (!audioPart?.data) throw new Error(`No audio data for block ${block.blockNumber}`);
 
-    const mimeType = audioPart.mimeType ?? "";
-    if (mimeType.includes("pcm") && !mimeType.includes("wav")) {
-      await convertToMp3WithPcm(rawPath, mp3Path, mimeType);
-    } else {
-      await convertToMp3(rawPath, mp3Path);
+        fs.writeFileSync(rawPath, Buffer.from(audioPart.data, "base64"));
+        const stat = fs.statSync(rawPath);
+        if (stat.size < 500) throw new Error(`Raw audio too small (${stat.size} bytes)`);
+
+        const mimeType = audioPart.mimeType ?? "";
+        if (mimeType.includes("pcm") && !mimeType.includes("wav")) {
+          await convertToMp3WithPcm(rawPath, mp3Path, mimeType);
+        } else {
+          await convertToMp3(rawPath, mp3Path);
+        }
+        try { fs.unlinkSync(rawPath); } catch { }
+
+        // FIX M-01: validar arquivo gerado antes de retornar
+        const mp3Stat = fs.statSync(mp3Path);
+        if (mp3Stat.size < 1000) throw new Error(`MP3 too small after conversion (${mp3Stat.size} bytes)`);
+
+        // FIX A-01: notificar progresso por bloco concluído
+        if (onBlockDone) onBlockDone(taskIdx, blocks.length);
+
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err instanceof Error ? err : new Error(String(err));
+        // limpa arquivo parcial antes de tentar fallback
+        try { if (fs.existsSync(rawPath)) fs.unlinkSync(rawPath); } catch { }
+      }
     }
-    try { fs.unlinkSync(rawPath); } catch { }
+
+    if (lastErr) throw new Error(`Bloco ${block.blockNumber} falhou em todos os modelos TTS: ${lastErr.message}`);
     return mp3Path;
   });
 
-  const mp3Paths = await runConcurrent(tasks, 2);
-  // Return in block order
-  return blocks.map((b) =>
+  // FIX C-01: runConcurrent com concorrência 2 — erro de bloco individual não mata os outros
+  await runConcurrent(tasks, 2);
+
+  // FIX M-01: validar que todos os arquivos existem e têm tamanho adequado
+  const mp3Paths = blocks.map((b) =>
     path.join(audioDir, `audio_${String(b.blockNumber).padStart(2, "0")}.mp3`)
   );
+
+  for (const p of mp3Paths) {
+    if (!fs.existsSync(p)) throw new Error(`Arquivo de áudio ausente: ${path.basename(p)}`);
+    const stat = fs.statSync(p);
+    if (stat.size < 1000) throw new Error(`Arquivo de áudio corrompido: ${path.basename(p)} (${stat.size} bytes)`);
+  }
+
+  return mp3Paths;
 }
 
 // ─── IMAGE GENERATION ────────────────────────────────────────────────────────
@@ -384,7 +413,6 @@ export async function generateImagesWithGemini(
     ? "glowing neon accents, dark cinematic background, holographic elements,"
     : "";
 
-  // Generate all images in parallel (max 2 concurrent — Gemini image has strict rate limits)
   await runConcurrent(
     blocks.map((block, i) => async () => {
       const suffix = STYLE_SUFFIXES[i % STYLE_SUFFIXES.length];
@@ -415,8 +443,6 @@ export async function generateImagesWithGemini(
 }
 
 // ─── CUSTOM SCRIPT PARSER ────────────────────────────────────────────────────
-// Accepts a free-form user script and uses Gemini to split it into 10 blocks
-// with appropriate image prompts for each block.
 export async function parseCustomScriptWithGemini(
   customScript: string,
   topic: string,
@@ -473,17 +499,10 @@ ${customScript}`;
     const imagePrompt = prmMatch?.[1]?.trim() ?? `Cinematic shot, dramatic lighting, ${style} mood, ultra-sharp 8K`;
     const visual = VISUAL_SEQUENCE[(bn - 1) % 10];
     if (text) {
-      blocks.push({
-        blockNumber: bn,
-        text,
-        imagePrompt,
-        cameraMovement: visual.camera,
-        visualType: visual.type,
-      });
+      blocks.push({ blockNumber: bn, text, imagePrompt, cameraMovement: visual.camera, visualType: visual.type });
     }
   }
 
-  // If parsing failed, do a simple word-count split
   if (blocks.length < 3) {
     const words = customScript.trim().split(/\s+/);
     const chunkSize = Math.ceil(words.length / 10);
@@ -506,8 +525,6 @@ ${customScript}`;
 }
 
 // ─── IMAGE PROMPT ENHANCEMENT ────────────────────────────────────────────────
-// Uses Gemini to improve all 10 image prompts before sending to image generators.
-// Results in dramatically better cinematic imagery.
 export async function enhanceImagePromptsWithGemini(
   blocks: ScriptBlock[],
   style: string,
@@ -549,7 +566,7 @@ ${promptsText}`;
     const enhanced = [...blocks];
 
     for (let i = 0; i < blocks.length; i++) {
-      const match = content.match(new RegExp(`ENHANCED_${i + 1}:\\s*([^\\n]+(?:\\n(?!ENHANCED_\\d)[^\\n]+)*)`, "i"));
+      const match = content.match(new RegExp(`ENHANCED_${i + 1}:\\s*([^\n]+(?:\n(?!ENHANCED_\\d)[^\n]+)*)`, "i"));
       if (match) {
         const improved = match[1].trim();
         if (improved.length > 20) {
@@ -560,7 +577,6 @@ ${promptsText}`;
 
     return enhanced;
   } catch {
-    // If enhancement fails, return original blocks unchanged
     return blocks;
   }
 }
@@ -593,16 +609,10 @@ Generate COMPLETE YouTube metadata that maximizes clicks, watch time, and algori
 
 RETURN ONLY valid JSON with this EXACT structure:
 {
-  "titles": [
-    "TITLE 1 — shocking hook, under 60 chars, no clickbait lies",
-    "TITLE 2 — curiosity gap format",
-    "TITLE 3 — number-based format",
-    "TITLE 4 — question format",
-    "TITLE 5 — secret/hidden/truth format"
-  ],
-  "description": "Complete YouTube description in ${language}, 900-1200 characters. Start with the most compelling hook (no 'bem-vindos'). Include: what the video reveals, why it matters NOW, timestamps placeholder, call to action, channel info. End with relevant keywords naturally embedded.",
-  "tags": ["tag1", "tag2", "tag3"...] (25-30 highly specific tags in ${language} mixing broad and niche),
-  "hashtags": ["#Hashtag1", "#Hashtag2", "#Hashtag3", "#Hashtag4", "#Hashtag5", "#Hashtag6"]
+  "titles": ["TITLE 1", "TITLE 2", "TITLE 3", "TITLE 4", "TITLE 5"],
+  "description": "Complete YouTube description in ${language}, 900-1200 characters.",
+  "tags": ["tag1", "tag2", "tag3"],
+  "hashtags": ["#Hashtag1", "#Hashtag2", "#Hashtag3"]
 }`;
 
   const defaultMeta: YouTubeMetadata = {

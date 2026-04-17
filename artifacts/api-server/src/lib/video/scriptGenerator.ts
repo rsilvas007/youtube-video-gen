@@ -93,7 +93,7 @@ CHECKLIST FINAL (verifique antes de responder):
 ✅ O bloco 10 termina com uma pergunta ou afirmação que ressoa?`;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-5.2",
+    model: "gpt-4o",  // FIX A-02: era "gpt-5.2" — modelo inexistente na API OpenAI
     max_completion_tokens: 8192,
     messages: [
       { role: "system", content: systemPrompt },

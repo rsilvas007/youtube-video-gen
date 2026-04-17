@@ -89,11 +89,11 @@ function makeZoompanVariants(w: number, h: number, fps: number) {
   return [
     (d: number) => `zoompan=z='min(zoom+0.0010,1.4)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.0010))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
-    (d: number) => `zoompan=z='min(zoom+0.0008,1.3)':x='iw/2-(iw/zoom/2)+sin(on/${fps})*20':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
+    (d: number) => `zoompan=z='min(zoom+0.0008,1.3)':x='iw/2-(iw/zoom/2)+sin(on/(${fps}*8))*20':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='min(zoom+0.0010,1.35)':x='0':y='0':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='min(zoom+0.0008,1.3)':x='iw-iw/zoom':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='min(zoom+0.0012,1.45)':x='iw/2-(iw/zoom/2)':y='0':d=${d}:s=${s}`,
-    (d: number) => `zoompan=z='1.3':x='iw/2-(iw/zoom/2)+cos(on/${fps})*15':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
+    (d: number) => `zoompan=z='1.3':x='iw/2-(iw/zoom/2)+cos(on/(${fps}*8))*15':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='min(zoom+0.0006,1.25)':x='iw-(iw/zoom)':y='ih-(ih/zoom)':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='if(lte(zoom,1.0),1.4,max(1.001,zoom-0.0012))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${d}:s=${s}`,
     (d: number) => `zoompan=z='min(zoom+0.0009,1.35)':x='iw/2-(iw/zoom/2)':y='ih-(ih/zoom)':d=${d}:s=${s}`,
@@ -112,12 +112,15 @@ export async function mergeAudios(
 
   const fullAudioPath = path.join(outputDir, "audio_full.mp3");
 
+  // FIX A-04: reencoding uniforme em vez de -c copy (evita corrupção por bitrates diferentes)
   await runFFmpeg([
     "-y",
     "-f", "concat",
     "-safe", "0",
     "-i", listFile,
-    "-c", "copy",
+    "-c:a", "libmp3lame",
+    "-ar", "44100",
+    "-b:a", "192k",
     fullAudioPath,
   ]);
 
@@ -264,7 +267,7 @@ export async function burnSubtitles(
     "-i", inputVideoPath,
     "-vf", `ass='${escaped}'`,
     "-c:v", "libx264",
-    "-preset", "ultrafast",
+    "-preset", "ultrafast",  // FIX M-05: era default "medium" — 5-10x mais lento
     "-crf", "20",
     "-c:a", "copy",
     outputPath,

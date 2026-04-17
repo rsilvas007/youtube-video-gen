@@ -83,7 +83,6 @@ router.delete("/videos/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Helper: scale block count with duration
 function getBlockCount(durationMinutes: number): number {
   if (durationMinutes <= 0.75) return 3;
   if (durationMinutes <= 1.5)  return 4;
@@ -182,6 +181,10 @@ router.post("/videos/:id/generate", async (req, res) => {
   const outputDir = path.join(workDir, "output");
 
   try {
+    // FIX L-01: limpar workDir de runs anteriores para evitar arquivos parciais
+    if (fs.existsSync(workDir)) {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
     fs.mkdirSync(workDir, { recursive: true });
 
     // ─── STEP 1: SCRIPT ───────────────────────────────────────────────────────
@@ -196,7 +199,6 @@ router.post("/videos/:id/generate", async (req, res) => {
       blocks = USE_GEMINI
         ? await parseCustomScriptWithGemini(video.customScript!, video.topic, video.style, video.language, scriptModel)
         : (() => {
-            // Fallback: simple split without Gemini
             const words = video.customScript!.trim().split(/\s+/);
             const size = Math.ceil(words.length / 10);
             return Array.from({ length: 10 }, (_, i) => ({
@@ -228,6 +230,7 @@ router.post("/videos/:id/generate", async (req, res) => {
           }
         }
       } else {
+        // FIX A-02: generateScript usa o scriptModel parametrizado corretamente
         blocks = await generateScript(video.topic, video.style, video.durationMinutes, video.language, getBlockCount(video.durationMinutes));
       }
       sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
@@ -235,9 +238,8 @@ router.post("/videos/:id/generate", async (req, res) => {
 
     await updateVideo(id, { progress: 15 });
 
-    // ─── METADATA (parallel, fire-and-forget with result) ─────────────────────
+    // ─── METADATA (fire-and-forget) ────────────────────────────────────────────
     if (USE_GEMINI) {
-      sendEvent("script", "🎯 Gerando metadados YouTube com Gemini...", 15);
       generateYouTubeMetadataWithGemini(blocks, video.topic, video.style, video.language, scriptModel)
         .then(async (meta) => {
           await updateVideo(id, {
@@ -254,30 +256,32 @@ router.post("/videos/:id/generate", async (req, res) => {
     const isGeminiTts = USE_GEMINI &&
       (video.voice.startsWith("gemini-tts:") || video.voice.startsWith("gemini-3.1-tts:"));
     const isElevenLabs = USE_ELEVENLABS && !isGeminiTts && video.voice.length > 20;
-    // Safety: any unrecognized (legacy OpenAI-style) voice falls back to Gemini TTS
     const effectiveVoice = (!isGeminiTts && !isElevenLabs)
       ? "gemini-tts:Charon"
       : video.voice;
     const ttsModelLabel = effectiveVoice.startsWith("gemini-3.1-tts:") ? "Gemini 3.1 Flash TTS" : "Gemini 2.5 Flash TTS";
     const audioLabel = isGeminiTts ? ttsModelLabel : isElevenLabs ? "ElevenLabs" : ttsModelLabel;
 
-    sendEvent("audio", `🎙️ Gerando áudios com ${audioLabel}...`, 18);
+    sendEvent("audio", `🎙️ Gerando ${blocks.length} áudios com ${audioLabel}...`, 18);
     await updateVideo(id, { status: "generating_audio", progress: 18 });
+
+    // FIX A-01: callback por bloco para SSE em tempo real
+    let audioDoneCount = 0;
+    const onAudioBlockDone = async (_blockIdx: number, total: number) => {
+      audioDoneCount++;
+      const pct = 18 + Math.round(audioDoneCount * (17 / total));
+      sendEvent("audio", `🎵 Áudio ${audioDoneCount}/${total} gerado.`, pct);
+      await updateVideo(id, { progress: pct });
+    };
 
     let audioPaths: string[];
     if (isElevenLabs) {
-      audioPaths = await generateAudioWithElevenLabs(blocks, audioDir, effectiveVoice);
+      audioPaths = await generateAudioWithElevenLabs(blocks, audioDir, effectiveVoice, onAudioBlockDone);
     } else {
-      // Gemini TTS (includes remapped legacy voices)
-      audioPaths = await generateAudioWithGemini(blocks, audioDir, effectiveVoice);
+      audioPaths = await generateAudioWithGemini(blocks, audioDir, effectiveVoice, onAudioBlockDone);
     }
 
-    for (let i = 0; i < audioPaths.length; i++) {
-      const pct = 18 + Math.round((i + 1) * (17 / audioPaths.length));
-      sendEvent("audio", `Áudio ${i + 1}/${audioPaths.length} gerado.`, pct);
-      await updateVideo(id, { progress: pct });
-    }
-    sendEvent("audio", "Todos os áudios gerados.", 35);
+    sendEvent("audio", "✅ Todos os áudios gerados.", 35);
     await updateVideo(id, { progress: 35 });
 
     const fullAudioPath  = await mergeAudios(audioPaths, outputDir);
@@ -287,13 +291,12 @@ router.post("/videos/:id/generate", async (req, res) => {
     const imageModel = video.imageModel ?? "flux-realism";
     const useGeminiImg = USE_GEMINI && (imageModel.startsWith("gemini-") || imageModel.startsWith("nano-"));
 
-    // Enhance image prompts with Gemini before any image generation
     if (USE_GEMINI) {
       sendEvent("images", "✨ Aprimorando prompts de imagem com Gemini...", 36);
       try {
         blocks = await enhanceImagePromptsWithGemini(blocks, video.style, video.topic, scriptModel);
         sendEvent("images", "Prompts cinematográficos aprimorados.", 37);
-      } catch { /* non-fatal, use original prompts */ }
+      } catch { /* non-fatal, usa prompts originais */ }
     }
 
     let imagePaths: string[];
@@ -312,15 +315,13 @@ router.post("/videos/:id/generate", async (req, res) => {
             : `⚠️ Gemini imagem falhou — usando Pollinations como fallback...`,
           37
         );
-        const fallbackModel = "flux-realism";
-        imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, fallbackModel);
+        imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, "flux-realism");
       }
     } else if (USE_POLLINATIONS) {
       sendEvent("images", `🎨 Gerando imagens com Pollinations (${imageModel})...`, 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
       imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, imageModel);
     } else {
-      // Last resort: Pollinations with default model
       sendEvent("images", "🎨 Gerando imagens com Pollinations...", 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
       imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, "flux-realism");
@@ -328,14 +329,15 @@ router.post("/videos/:id/generate", async (req, res) => {
 
     for (let i = 0; i < imagePaths.length; i++) {
       const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
-      sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
+      sendEvent("images", `🖼️ Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
       await updateVideo(id, { progress: pct });
     }
-    sendEvent("images", "Todas as imagens geradas.", 55);
+    sendEvent("images", "✅ Todas as imagens geradas.", 55);
     await updateVideo(id, { progress: 55 });
 
     // ─── STEP 4: VIDEO CLIPS ──────────────────────────────────────────────────
     const videoModel = video.videoModel ?? "seedance";
+    const vPlatform = video.platform ?? "youtube";
 
     if (USE_POLLINATIONS && !videoModel.startsWith("ken-burns")) {
       sendEvent("video", `🎬 Gerando clipes com Pollinations (${videoModel})...`, 57);
@@ -359,29 +361,28 @@ router.post("/videos/:id/generate", async (req, res) => {
         await updateVideo(id, { progress: pct });
       }
 
-      sendEvent("video", "Montando vídeo final...", 87);
+      sendEvent("video", "🎞️ Montando vídeo final...", 87);
       await updateVideo(id, { status: "assembling_video", progress: 87 });
 
-      const vPlatform = video.platform ?? "youtube";
       if (successClips.length === blocks.length) {
+        // Todos os clipes OK — usa assembleFromClips normalmente
         await assembleFromClips(successClips, fullAudioPath, outputVideoPath, vPlatform);
-      } else if (successClips.length > 0) {
-        const resolvedPaths = rawClipPaths.map((p, i) =>
-          p.startsWith("__FAILED__:") ? imagePaths[i] : p
-        );
-        await assembleFromClips(resolvedPaths, fullAudioPath, outputVideoPath, vPlatform);
+      } else if (failedIndexes.length === 0) {
+        // Nenhum falhou (redundante mas seguro)
+        await assembleFromClips(rawClipPaths, fullAudioPath, outputVideoPath, vPlatform);
       } else {
-        sendEvent("video", "⚠️ Usando animação dinâmica de imagens...", 87);
+        // FIX C-03: qualquer clip falhou → usa assembleVideo com imagens (aceita JPG/PNG)
+        // NUNCA passar imagePaths[i] para assembleFromClips — FFmpeg só aceita MP4 lá
+        sendEvent("video", "⚠️ Alguns clipes falharam — montando com animação dinâmica de imagens...", 87);
         await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath, vPlatform);
       }
     } else {
-      const vPlatform = video.platform ?? "youtube";
-      sendEvent("video", "Montando vídeo com animações sincronizadas ao áudio...", 60);
+      sendEvent("video", "🎞️ Montando vídeo com animações sincronizadas ao áudio...", 60);
       await updateVideo(id, { status: "assembling_video", progress: 60 });
       await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath, vPlatform);
     }
 
-    sendEvent("video", "Vídeo montado com sucesso!", 92);
+    sendEvent("video", "✅ Vídeo montado com sucesso!", 92);
     await updateVideo(id, { progress: 92 });
 
     // ─── STEP 5: SUBTITLES ────────────────────────────────────────────────────
@@ -396,6 +397,7 @@ router.post("/videos/:id/generate", async (req, res) => {
         const spec = PLATFORM_SPECS[video.platform ?? "youtube"] ?? PLATFORM_SPECS["youtube"];
         const audioDurs = await getAudioDurations(audioPaths);
 
+        // FIX L-03: sem emojis no estilo viral para evitar problema com libass sem fonte emoji
         const subtitleBlocks = blocks.map((b, i) => ({ blockNumber: i + 1, text: b.text ?? "" }));
         const generated = generateASSSubtitles(
           subtitleBlocks,
@@ -422,12 +424,12 @@ router.post("/videos/:id/generate", async (req, res) => {
     }
 
     await updateVideo(id, { status: "done", progress: 100, outputPath: outputVideoPath });
-    sendEvent("done", "Finalizado! Seu vídeo está pronto para download.", 100);
+    sendEvent("done", "🎉 Finalizado! Seu vídeo está pronto para download.", 100);
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro desconhecido no pipeline.";
-    sendEvent("error", `Erro: ${message}`, 0);
+    sendEvent("error", `❌ Erro: ${message}`, 0);
     await updateVideo(id, { status: "error", errorMessage: message });
     res.write(`data: ${JSON.stringify({ done: true, error: message })}\n\n`);
     res.end();
