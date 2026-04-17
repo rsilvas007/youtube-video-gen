@@ -16,16 +16,53 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Zap } from "lucide-react";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 
+const IMAGE_MODELS = [
+  { value: "flux",            label: "Flux Schnell",         desc: "Rápido, qualidade alta" },
+  { value: "flux-realism",    label: "Flux Realism",         desc: "Hiper-realista" },
+  { value: "flux-cinematic",  label: "Flux Cinematic",       desc: "Estilo cinematográfico" },
+  { value: "flux-pro",        label: "Flux Pro",             desc: "Máxima qualidade Flux" },
+  { value: "kontext",         label: "FLUX.1 Kontext",       desc: "Edição contextual avançada" },
+  { value: "klein",           label: "FLUX.2 Klein 4B",      desc: "Rápido com edição" },
+  { value: "zimage",          label: "Z-Image Turbo",        desc: "Flux 6B + upscale 2x" },
+  { value: "gptimage",        label: "GPT Image 1 Mini",     desc: "OpenAI Mini" },
+  { value: "gptimage-large",  label: "GPT Image 1.5",        desc: "OpenAI avançado" },
+  { value: "nanobanana",      label: "NanoBanana",           desc: "Gemini 2.5 Flash" },
+  { value: "nanobanana-2",    label: "NanoBanana 2",         desc: "Gemini 3.1 Flash" },
+  { value: "nanobanana-pro",  label: "NanoBanana Pro",       desc: "Gemini 3 Pro 4K" },
+  { value: "seedream5",       label: "Seedream 5.0",         desc: "ByteDance ARK" },
+  { value: "wan-image",       label: "Wan 2.7 Image",        desc: "Alibaba até 2K" },
+  { value: "wan-image-pro",   label: "Wan 2.7 Image Pro",    desc: "Alibaba 4K + thinking" },
+  { value: "qwen-image",      label: "Qwen Image Plus",      desc: "Alibaba DashScope" },
+  { value: "grok-imagine",    label: "Grok Imagine",         desc: "xAI oficial" },
+  { value: "grok-imagine-pro",label: "Grok Imagine Pro",     desc: "xAI Aurora Pro" },
+  { value: "nova-canvas",     label: "Nova Canvas",          desc: "Amazon Bedrock" },
+  { value: "p-image",         label: "p-image (Pruna)",      desc: "Rápido text-to-image" },
+];
+
+const VIDEO_MODELS = [
+  { value: "seedance",        label: "Seedance Lite",        desc: "BytePlus — qualidade alta" },
+  { value: "seedance-pro",    label: "Seedance Pro-Fast",    desc: "BytePlus — melhor aderência" },
+  { value: "wan-fast",        label: "Wan 2.2 Fast",         desc: "Alibaba — rápido 480P 5s" },
+  { value: "wan",             label: "Wan 2.6",              desc: "Alibaba — 1080P 2-15s + áudio" },
+  { value: "veo",             label: "Veo 3.1 Fast",         desc: "Google — preview" },
+  { value: "grok-video-pro",  label: "Grok Video Pro",       desc: "xAI — 720p 1-15s" },
+  { value: "ltx-2",           label: "LTX-2.3",              desc: "Rápido + upscaler" },
+  { value: "p-video",         label: "p-video (Pruna)",      desc: "Text/image-to-video 1080p" },
+  { value: "nova-reel",       label: "Nova Reel",            desc: "Amazon Bedrock 720p 6-60s" },
+];
+
 const videoFormSchema = z.object({
-  topic: z.string().min(3, "O tema é obrigatório").max(100),
+  topic: z.string().min(3, "O tema é obrigatório").max(200),
   style: z.enum(["curioso", "misterioso", "educativo", "dramático"]),
   durationMinutes: z.coerce.number().min(8).max(15),
-  voice: z.enum(["alloy", "echo", "fable", "onyx", "nova", "shimmer"]),
+  voice: z.enum(["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"]),
   language: z.string().default("pt-BR"),
+  imageModel: z.string().default("flux-realism"),
+  videoModel: z.string().default("seedance"),
 });
 
 type VideoFormValues = z.infer<typeof videoFormSchema>;
@@ -34,6 +71,7 @@ export function VideoForm() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const createVideo = useCreateVideo();
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const form = useForm<VideoFormValues>({
     resolver: zodResolver(videoFormSchema),
@@ -43,6 +81,8 @@ export function VideoForm() {
       durationMinutes: 10,
       voice: "onyx",
       language: "pt-BR",
+      imageModel: "flux-realism",
+      videoModel: "seedance",
     },
   });
 
@@ -131,47 +171,134 @@ export function VideoForm() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <FormField
-              control={form.control}
-              name="voice"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Voz</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                        <SelectValue placeholder="Selecione a voz" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-popover border-border">
-                      <SelectItem value="alloy">Alloy</SelectItem>
-                      <SelectItem value="echo">Echo</SelectItem>
-                      <SelectItem value="fable">Fable</SelectItem>
-                      <SelectItem value="onyx">Onyx</SelectItem>
-                      <SelectItem value="nova">Nova</SelectItem>
-                      <SelectItem value="shimmer">Shimmer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          {/* Model Selection */}
+          <div className="border border-border/40 rounded-lg p-4 space-y-4 bg-background/30">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold">Modelos de IA</span>
+              <span className="text-xs text-primary/70 font-mono">Pollinations.ai</span>
+            </div>
 
-            <FormField
-              control={form.control}
-              name="language"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Idioma</FormLabel>
-                  <FormControl>
-                    <Input className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <FormField
+                control={form.control}
+                name="imageModel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono flex items-center gap-1">
+                      <Image className="w-3 h-3" /> Imagem
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
+                          <SelectValue placeholder="Modelo de imagem" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-popover border-border max-h-72">
+                        {IMAGE_MODELS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{m.label}</span>
+                              <span className="text-xs text-muted-foreground">{m.desc}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="videoModel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono flex items-center gap-1">
+                      <Film className="w-3 h-3" /> Vídeo
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
+                          <SelectValue placeholder="Modelo de vídeo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-popover border-border max-h-72">
+                        {VIDEO_MODELS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{m.label}</span>
+                              <span className="text-xs text-muted-foreground">{m.desc}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </div>
+
+          {/* Advanced options toggle */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            Opções avançadas (voz, idioma)
+          </button>
+
+          {showAdvanced && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+              <FormField
+                control={form.control}
+                name="voice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Voz</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
+                          <SelectValue placeholder="Selecione a voz" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="alloy">Alloy — neutro</SelectItem>
+                        <SelectItem value="ash">Ash — suave</SelectItem>
+                        <SelectItem value="ballad">Ballad — narrativo</SelectItem>
+                        <SelectItem value="coral">Coral — caloroso</SelectItem>
+                        <SelectItem value="echo">Echo — masculino</SelectItem>
+                        <SelectItem value="fable">Fable — dramático</SelectItem>
+                        <SelectItem value="onyx">Onyx — grave</SelectItem>
+                        <SelectItem value="nova">Nova — feminino</SelectItem>
+                        <SelectItem value="sage">Sage — sábio</SelectItem>
+                        <SelectItem value="shimmer">Shimmer — suave</SelectItem>
+                        <SelectItem value="verse">Verse — expressivo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="language"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Idioma</FormLabel>
+                    <FormControl>
+                      <Input className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
 
           <div className="pt-2">
             <Button

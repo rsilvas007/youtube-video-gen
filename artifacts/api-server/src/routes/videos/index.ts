@@ -163,7 +163,7 @@ router.post("/videos/:id/generate", async (req, res) => {
       sendEvent("images", "🎨 Gerando imagens cinematográficas com Pollinations.ai...", 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
 
-      const imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style);
+      const imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, video.imageModel);
       for (let i = 0; i < imagePaths.length; i++) {
         const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
         sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada com Pollinations.`, pct);
@@ -176,7 +176,7 @@ router.post("/videos/:id/generate", async (req, res) => {
       sendEvent("video", "🎬 Gerando clipes de vídeo com IA (Seedance/Wan)...", 57);
       await updateVideo(id, { status: "generating_clips", progress: 57 });
 
-      const rawClipPaths = await generatePollinationsVideoClips(blocks, audioPaths, clipsDir);
+      const rawClipPaths = await generatePollinationsVideoClips(blocks, audioPaths, clipsDir, video.videoModel);
 
       const successClips: string[] = [];
       const failedIndexes: number[] = [];

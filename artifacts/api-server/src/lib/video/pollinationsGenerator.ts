@@ -92,7 +92,8 @@ function fetchToFile(
 export async function generatePollinationsImages(
   blocks: ScriptBlock[],
   imagesDir: string,
-  style?: string
+  style?: string,
+  imageModel?: string
 ): Promise<string[]> {
   fs.mkdirSync(imagesDir, { recursive: true });
 
@@ -133,7 +134,7 @@ export async function generatePollinationsImages(
       .filter(Boolean)
       .join(" ");
 
-    const model = IMAGE_MODELS[i % IMAGE_MODELS.length];
+    const model = imageModel || IMAGE_MODELS[i % IMAGE_MODELS.length];
     const encoded = encodeURIComponent(fullPrompt);
     const url = `https://${BASE_URL}/image/${encoded}?width=1536&height=1024&model=${model}&nologo=true`;
 
@@ -165,7 +166,8 @@ export async function generatePollinationsImages(
 export async function generatePollinationsVideoClips(
   blocks: ScriptBlock[],
   audioPaths: string[],
-  clipsDir: string
+  clipsDir: string,
+  videoModel?: string
 ): Promise<string[]> {
   fs.mkdirSync(clipsDir, { recursive: true });
 
@@ -182,7 +184,7 @@ export async function generatePollinationsVideoClips(
       .filter(Boolean)
       .join(" ");
 
-    const model = VIDEO_MODELS[i % VIDEO_MODELS.length];
+    const model = videoModel || VIDEO_MODELS[i % VIDEO_MODELS.length];
     const encoded = encodeURIComponent(videoPrompt);
     const url = `https://${BASE_URL}/video/${encoded}?model=${model}&duration=5&aspectRatio=16:9`;
 
