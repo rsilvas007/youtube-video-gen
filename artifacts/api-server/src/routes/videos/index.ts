@@ -7,6 +7,7 @@ import { db } from "@workspace/db";
 import { videosTable } from "@workspace/db";
 import { generateScript } from "../../lib/video/scriptGenerator.js";
 import { generateAudio } from "../../lib/video/audioGenerator.js";
+import { generateAudioWithElevenLabs } from "../../lib/video/elevenLabsGenerator.js";
 import { generateImages } from "../../lib/video/imageGenerator.js";
 import {
   generatePollinationsImages,
@@ -20,6 +21,7 @@ import {
 
 const router = Router();
 const USE_POLLINATIONS = !!process.env.POLLINATIONS_API_KEY;
+const USE_ELEVENLABS = !!process.env.ELEVENLABS_API_KEY;
 
 function getVideoWorkDir(videoId: number): string {
   return path.join(os.tmpdir(), "yt-video-gen", String(videoId));
@@ -143,10 +145,18 @@ router.post("/videos/:id/generate", async (req, res) => {
     await updateVideo(id, { progress: 15 });
 
     // ─── STEP 2: AUDIO ─────────────────────────────────────────────
-    sendEvent("audio", "Gerando áudios com emoção por bloco...", 18);
+    const useElevenLabs = USE_ELEVENLABS && video.voice.length > 20; // ElevenLabs voice IDs are long UUIDs
+    const audioLabel = useElevenLabs ? "ElevenLabs (controle emocional por bloco)" : "OpenAI TTS";
+    sendEvent("audio", `🎙️ Gerando áudios com ${audioLabel}...`, 18);
     await updateVideo(id, { status: "generating_audio", progress: 18 });
 
-    const audioPaths = await generateAudio(blocks, audioDir, video.voice);
+    let audioPaths: string[];
+    if (useElevenLabs) {
+      audioPaths = await generateAudioWithElevenLabs(blocks, audioDir, video.voice);
+    } else {
+      audioPaths = await generateAudio(blocks, audioDir, video.voice);
+    }
+
     for (let i = 0; i < audioPaths.length; i++) {
       const pct = 18 + Math.round((i + 1) * (17 / audioPaths.length));
       sendEvent("audio", `Áudio ${i + 1}/${audioPaths.length} gerado.`, pct);

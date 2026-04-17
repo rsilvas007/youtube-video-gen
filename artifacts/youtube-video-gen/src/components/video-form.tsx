@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp, Mic } from "lucide-react";
 import { toast } from "sonner";
 
 const IMAGE_MODELS = [
@@ -55,11 +55,36 @@ const VIDEO_MODELS = [
   { value: "nova-reel",       label: "Nova Reel",            desc: "Amazon Bedrock 720p 6-60s" },
 ];
 
+const ELEVENLABS_VOICES = [
+  { id: "7u8qsX4HQsSHJ0f8xsQZ", name: "João Pedro",      desc: "Português Brasileiro", flag: "🇧🇷" },
+  { id: "TD909tfKkCKoStDEEElr", name: "Rafael Pereira",  desc: "Multilingual",          flag: "🌍" },
+  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel",          desc: "Narrador Britânico",    flag: "🇬🇧" },
+  { id: "JBFqnCBsd6RMkjVDRZzb", name: "George",          desc: "Storyteller Britânico", flag: "🇬🇧" },
+  { id: "nPczCjzI2devNBz1zQrb", name: "Brian",           desc: "Voz Grave",             flag: "🎙️" },
+  { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",            desc: "Sábio e Maduro",        flag: "🎙️" },
+  { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum",          desc: "Intenso e Dramático",   flag: "🎙️" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah",           desc: "Feminina Confiante",    flag: "🎙️" },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",         desc: "Profissional",          flag: "🎙️" },
+];
+
+const OPENAI_VOICES = [
+  { id: "onyx",    name: "Onyx",    desc: "Grave e Profundo" },
+  { id: "echo",    name: "Echo",    desc: "Masculino" },
+  { id: "fable",   name: "Fable",   desc: "Dramático" },
+  { id: "alloy",   name: "Alloy",   desc: "Neutro" },
+  { id: "nova",    name: "Nova",    desc: "Feminino" },
+  { id: "shimmer", name: "Shimmer", desc: "Suave" },
+  { id: "ash",     name: "Ash",     desc: "Suave" },
+  { id: "ballad",  name: "Ballad",  desc: "Narrativo" },
+  { id: "sage",    name: "Sage",    desc: "Sábio" },
+  { id: "verse",   name: "Verse",   desc: "Expressivo" },
+];
+
 const videoFormSchema = z.object({
   topic: z.string().min(3, "O tema é obrigatório").max(200),
   style: z.enum(["curioso", "misterioso", "educativo", "dramático"]),
   durationMinutes: z.coerce.number().min(8).max(15),
-  voice: z.enum(["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"]),
+  voice: z.string().min(1, "Selecione uma voz"),
   language: z.string().default("pt-BR"),
   imageModel: z.string().default("flux-realism"),
   videoModel: z.string().default("seedance"),
@@ -79,7 +104,7 @@ export function VideoForm() {
       topic: "",
       style: "curioso",
       durationMinutes: 10,
-      voice: "onyx",
+      voice: "7u8qsX4HQsSHJ0f8xsQZ", // João Pedro — ElevenLabs PT-BR by default
       language: "pt-BR",
       imageModel: "flux-realism",
       videoModel: "seedance",
@@ -248,48 +273,68 @@ export function VideoForm() {
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
           >
             {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            Opções avançadas (voz, idioma)
+            Opções avançadas (idioma do roteiro)
           </button>
 
-          {showAdvanced && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-              <FormField
-                control={form.control}
-                name="voice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Voz</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                          <SelectValue placeholder="Selecione a voz" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="bg-popover border-border">
-                        <SelectItem value="alloy">Alloy — neutro</SelectItem>
-                        <SelectItem value="ash">Ash — suave</SelectItem>
-                        <SelectItem value="ballad">Ballad — narrativo</SelectItem>
-                        <SelectItem value="coral">Coral — caloroso</SelectItem>
-                        <SelectItem value="echo">Echo — masculino</SelectItem>
-                        <SelectItem value="fable">Fable — dramático</SelectItem>
-                        <SelectItem value="onyx">Onyx — grave</SelectItem>
-                        <SelectItem value="nova">Nova — feminino</SelectItem>
-                        <SelectItem value="sage">Sage — sábio</SelectItem>
-                        <SelectItem value="shimmer">Shimmer — suave</SelectItem>
-                        <SelectItem value="verse">Verse — expressivo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          {/* Voice Selection — always visible */}
+          <div className="border border-border/40 rounded-lg p-4 space-y-3 bg-background/30">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold flex items-center gap-1">
+                <Mic className="w-3 h-3" /> Voz da Narração
+              </span>
+              <span className="text-xs text-yellow-500/80 font-mono">ElevenLabs + OpenAI</span>
+            </div>
 
+            <FormField
+              control={form.control}
+              name="voice"
+              render={({ field }) => (
+                <FormItem>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
+                        <SelectValue placeholder="Selecione a voz" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="bg-popover border-border max-h-80">
+                      <SelectGroup>
+                        <SelectLabel className="text-xs text-yellow-500/80 font-mono">⚡ ElevenLabs — Emocional</SelectLabel>
+                        {ELEVENLABS_VOICES.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{v.flag} {v.name}</span>
+                              <span className="text-xs text-muted-foreground">{v.desc}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel className="text-xs text-blue-400/80 font-mono">OpenAI TTS</SelectLabel>
+                        {OPENAI_VOICES.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{v.name}</span>
+                              <span className="text-xs text-muted-foreground">{v.desc}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          {showAdvanced && (
+            <div className="pt-1">
               <FormField
                 control={form.control}
                 name="language"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Idioma</FormLabel>
+                    <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Idioma do Roteiro</FormLabel>
                     <FormControl>
                       <Input className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
                     </FormControl>
