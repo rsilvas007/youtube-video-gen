@@ -21,6 +21,7 @@ const STATUS_LABELS: Record<string, string> = {
   generating_script: "GERANDO ROTEIRO",
   generating_audio: "GERANDO ÁUDIO",
   generating_images: "GERANDO IMAGENS",
+  generating_clips: "RUNWAY — CLIPES EM MOVIMENTO",
   assembling: "MONTANDO VÍDEO",
   assembling_video: "MONTANDO VÍDEO",
   done: "CONCLUÍDO",
@@ -247,7 +248,9 @@ export default function VideoDetail() {
               {isActive && (
                 <div className="flex items-center justify-center gap-2 py-3 text-primary text-sm font-mono">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Gerando vídeo... isso pode levar 10-15 minutos
+                  {video.status === "generating_clips"
+                    ? "Runway gerando clipes... ~2 min por clipe"
+                    : "Gerando vídeo... 15-25 minutos no total"}
                 </div>
               )}
 

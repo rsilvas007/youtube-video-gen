@@ -11,6 +11,7 @@ const STATUS_LABELS: Record<string, string> = {
   generating_script: "GERANDO ROTEIRO",
   generating_audio: "GERANDO ÁUDIO",
   generating_images: "GERANDO IMAGENS",
+  generating_clips: "GERANDO CLIPES (RUNWAY)",
   assembling: "MONTANDO VÍDEO",
   assembling_video: "MONTANDO VÍDEO",
   done: "CONCLUÍDO",
