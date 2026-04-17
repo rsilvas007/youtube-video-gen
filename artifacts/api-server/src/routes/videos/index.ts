@@ -8,16 +8,18 @@ import { videosTable } from "@workspace/db";
 import { generateScript } from "../../lib/video/scriptGenerator.js";
 import { generateAudio } from "../../lib/video/audioGenerator.js";
 import { generateImages } from "../../lib/video/imageGenerator.js";
-import { generateVideoClips } from "../../lib/video/runwayGenerator.js";
+import {
+  generatePollinationsImages,
+  generatePollinationsVideoClips,
+} from "../../lib/video/pollinationsGenerator.js";
 import {
   mergeAudios,
   assembleFromClips,
   assembleVideo,
 } from "../../lib/video/videoAssembler.js";
 
-
 const router = Router();
-const USE_RUNWAY = !!process.env.RUNWAY_API_KEY;
+const USE_POLLINATIONS = !!process.env.POLLINATIONS_API_KEY;
 
 function getVideoWorkDir(videoId: number): string {
   return path.join(os.tmpdir(), "yt-video-gen", String(videoId));
@@ -127,6 +129,7 @@ router.post("/videos/:id/generate", async (req, res) => {
   try {
     fs.mkdirSync(workDir, { recursive: true });
 
+    // ─── STEP 1: SCRIPT ────────────────────────────────────────────
     sendEvent("script", "Gerando roteiro com IA...", 5);
     await updateVideo(id, { status: "generating_script", progress: 5 });
 
@@ -137,85 +140,98 @@ router.post("/videos/:id/generate", async (req, res) => {
       video.language
     );
     sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
+    await updateVideo(id, { progress: 15 });
 
-    sendEvent("audio", "Gerando áudios de narração...", 20);
-    await updateVideo(id, { status: "generating_audio", progress: 20 });
+    // ─── STEP 2: AUDIO ─────────────────────────────────────────────
+    sendEvent("audio", "Gerando áudios com emoção por bloco...", 18);
+    await updateVideo(id, { status: "generating_audio", progress: 18 });
 
     const audioPaths = await generateAudio(blocks, audioDir, video.voice);
     for (let i = 0; i < audioPaths.length; i++) {
-      const pct = 20 + Math.round((i + 1) * (15 / audioPaths.length));
+      const pct = 18 + Math.round((i + 1) * (17 / audioPaths.length));
       sendEvent("audio", `Áudio ${i + 1}/${audioPaths.length} gerado.`, pct);
       await updateVideo(id, { progress: pct });
     }
     sendEvent("audio", "Todos os áudios gerados.", 35);
+    await updateVideo(id, { progress: 35 });
 
-    sendEvent("images", "Gerando imagens cinematográficas com IA...", 37);
-    await updateVideo(id, { status: "generating_images", progress: 37 });
-
-    const imagePaths = await generateImages(blocks, imagesDir, video.style);
-    for (let i = 0; i < imagePaths.length; i++) {
-      const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
-      sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
-      await updateVideo(id, { progress: pct });
-    }
-    sendEvent("images", "Todas as imagens geradas.", 55);
-
+    // ─── STEP 3: IMAGES ────────────────────────────────────────────
     const fullAudioPath = await mergeAudios(audioPaths, outputDir);
     const outputVideoPath = path.join(outputDir, "video_final.mp4");
 
-    if (USE_RUNWAY) {
-      sendEvent("video", "🎬 Gerando clipes de vídeo com IA Runway (isso leva alguns minutos)...", 57);
+    if (USE_POLLINATIONS) {
+      sendEvent("images", "🎨 Gerando imagens cinematográficas com Pollinations.ai...", 37);
+      await updateVideo(id, { status: "generating_images", progress: 37 });
+
+      const imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style);
+      for (let i = 0; i < imagePaths.length; i++) {
+        const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
+        sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada com Pollinations.`, pct);
+        await updateVideo(id, { progress: pct });
+      }
+      sendEvent("images", "Todas as imagens geradas.", 55);
+      await updateVideo(id, { progress: 55 });
+
+      // ─── STEP 4: VIDEO CLIPS (Pollinations) ─────────────────────
+      sendEvent("video", "🎬 Gerando clipes de vídeo com IA (Seedance/Wan)...", 57);
       await updateVideo(id, { status: "generating_clips", progress: 57 });
 
-      const secondsPerClip = 5;
-      const clipPaths: string[] = [];
+      const rawClipPaths = await generatePollinationsVideoClips(blocks, audioPaths, clipsDir);
 
-      for (let i = 0; i < blocks.length; i++) {
-        const pct = 57 + Math.round((i + 1) * (30 / blocks.length));
-        sendEvent("video", `Clipe ${i + 1}/${blocks.length} sendo gerado pelo Runway...`, pct);
-        await updateVideo(id, { progress: pct });
+      const successClips: string[] = [];
+      const failedIndexes: number[] = [];
 
-        try {
-          const singleClip = await generateVideoClips(
-            [blocks[i]],
-            [imagePaths[i]],
-            clipsDir,
-            secondsPerClip
-          );
-          clipPaths.push(...singleClip);
-        } catch (clipErr) {
-          const msg = clipErr instanceof Error ? clipErr.message : String(clipErr);
-          sendEvent("video", `⚠️ Clipe ${i + 1} falhou, usando imagem animada: ${msg.slice(0, 80)}`, pct);
-          clipPaths.push("__FALLBACK__:" + imagePaths[i]);
+      for (let i = 0; i < rawClipPaths.length; i++) {
+        const p = rawClipPaths[i];
+        const pct = 57 + Math.round((i + 1) * (28 / rawClipPaths.length));
+        if (p.startsWith("__FAILED__:")) {
+          failedIndexes.push(i);
+          sendEvent("video", `⚠️ Clipe ${i + 1} falhou, usando imagem animada como fallback.`, pct);
+        } else {
+          successClips.push(p);
+          sendEvent("video", `✅ Clipe ${i + 1}/${blocks.length} gerado.`, pct);
         }
+        await updateVideo(id, { progress: pct });
       }
 
-      const validClips = clipPaths.filter((p) => !p.startsWith("__FALLBACK__"));
-      const fallbackImages = clipPaths
-        .filter((p) => p.startsWith("__FALLBACK__"))
-        .map((p) => p.replace("__FALLBACK__:", ""));
+      sendEvent("video", "Montando vídeo final...", 87);
+      await updateVideo(id, { status: "assembling_video", progress: 87 });
 
-      if (validClips.length === blocks.length) {
-        sendEvent("video", "Todos os clipes prontos! Montando vídeo final...", 88);
-        await updateVideo(id, { status: "assembling_video", progress: 88 });
-        await assembleFromClips(clipPaths, fullAudioPath, outputVideoPath);
-      } else if (validClips.length > 0) {
-        sendEvent("video", `${validClips.length} clipes prontos, montando vídeo híbrido...`, 88);
-        await updateVideo(id, { status: "assembling_video", progress: 88 });
-
-        const resolvedPaths = clipPaths.map((p) => p.replace("__FALLBACK__:", ""));
+      if (successClips.length === blocks.length) {
+        // All clips succeeded — concat them directly
+        await assembleFromClips(successClips, fullAudioPath, outputVideoPath);
+      } else if (successClips.length > 0) {
+        // Some failed — mix real clips with Ken Burns on failed blocks
+        const resolvedPaths: string[] = [];
+        for (let i = 0; i < rawClipPaths.length; i++) {
+          if (!rawClipPaths[i].startsWith("__FAILED__:")) {
+            resolvedPaths.push(rawClipPaths[i]);
+          } else {
+            resolvedPaths.push(imagePaths[i]);
+          }
+        }
         await assembleFromClips(resolvedPaths, fullAudioPath, outputVideoPath);
       } else {
-        sendEvent("video", "⚠️ Runway indisponível, usando animação de imagens...", 88);
-        await updateVideo(id, { status: "assembling_video", progress: 88 });
+        // All clips failed — fall back to full zoompan
+        sendEvent("video", "⚠️ Clipes indisponíveis, usando animação dinâmica de imagens...", 87);
         await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
       }
-    } else {
-      sendEvent("video", "Mesclando áudios e sincronizando imagens...", 60);
-      await updateVideo(id, { status: "assembling_video", progress: 60 });
 
-      sendEvent("video", "Montando vídeo com animações sincronizadas ao áudio...", 70);
-      await updateVideo(id, { progress: 70 });
+    } else {
+      // No Pollinations key — use OpenAI for images + zoompan animation
+      sendEvent("images", "Gerando imagens cinematográficas com IA...", 37);
+      await updateVideo(id, { status: "generating_images", progress: 37 });
+
+      const imagePaths = await generateImages(blocks, imagesDir, video.style);
+      for (let i = 0; i < imagePaths.length; i++) {
+        const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
+        sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
+        await updateVideo(id, { progress: pct });
+      }
+      sendEvent("images", "Todas as imagens geradas.", 55);
+
+      sendEvent("video", "Montando vídeo com animações sincronizadas ao áudio...", 60);
+      await updateVideo(id, { status: "assembling_video", progress: 60 });
 
       await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
     }
