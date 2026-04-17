@@ -213,9 +213,23 @@ router.post("/videos/:id/generate", async (req, res) => {
       const scriptLabel = useGeminiScript ? `Google ${scriptModel}` : `OpenAI ${scriptModel}`;
       sendEvent("script", `✍️ Gerando roteiro com ${scriptLabel}...`, 5);
       await updateVideo(id, { status: "generating_script", progress: 5 });
-      blocks = useGeminiScript
-        ? await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel, getBlockCount(video.durationMinutes))
-        : await generateScript(video.topic, video.style, video.durationMinutes, video.language, getBlockCount(video.durationMinutes));
+      if (useGeminiScript) {
+        try {
+          blocks = await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel, getBlockCount(video.durationMinutes));
+        } catch (scriptErr) {
+          const errMsg = scriptErr instanceof Error ? scriptErr.message : String(scriptErr);
+          const isOverload = errMsg.includes("503") || errMsg.includes("overload") || errMsg.includes("UNAVAILABLE");
+          const fallbackModel = "gemini-2.0-flash";
+          if (isOverload && scriptModel !== fallbackModel) {
+            sendEvent("script", `⚡ ${scriptModel} sobrecarregado — usando ${fallbackModel}...`, 7);
+            blocks = await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, fallbackModel, getBlockCount(video.durationMinutes));
+          } else {
+            throw scriptErr;
+          }
+        }
+      } else {
+        blocks = await generateScript(video.topic, video.style, video.durationMinutes, video.language, getBlockCount(video.durationMinutes));
+      }
       sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
     }
 

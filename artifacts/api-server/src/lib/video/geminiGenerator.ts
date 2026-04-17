@@ -165,9 +165,9 @@ async function geminiPostWithRetry(
 
       if (!isRetryable || attempt === maxAttempts) throw lastError;
 
-      // 503 overloaded: 10s, 20s, 30s, 40s
-      // 429 quota:      30s, 60s, 90s, 120s
-      const baseDelay = is429 ? 30_000 : 10_000;
+      // 503 overloaded: 4s, 8s, 12s, 16s  (fast retry — usually resolves in seconds)
+      // 429 quota:      20s, 40s, 60s, 80s (quota needs more wait)
+      const baseDelay = is429 ? 20_000 : 4_000;
       const delay = baseDelay * attempt;
       await new Promise((r) => setTimeout(r, delay));
     }
