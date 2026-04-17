@@ -1,0 +1,95 @@
+Use this skill whenever a content creator, designer, or video editor asks about video dimensions, aspect ratios, resolutions, safe zones, export settings, or format specifications for social media platforms. Trigger when the user mentions: dimensões de vídeo, proporção, resolução, formato, Stories, Reels, Shorts, TikTok, Instagram, YouTube, Facebook, exportar vídeo, safe zone, área de segurança, 9:16, 16:9, 1:1, 4:5, FPS, codec, H.264, MP4, MOV, compressão, qualidade de exportação, tamanho de vídeo, pixel, vertical, horizontal, quadrado, landscape, portrait, ou qualquer pergunta sobre como dimensionar ou exportar vídeos para redes sociais. Use this skill aggressively — if video export, social media video quality, or platform format is mentioned in any way, consult this skill immediately.📐 Social Video Dimensions Skill
+Dimensões, proporções e configurações de exportação para vídeos em redes sociais — 2026
+
+O QUE ESTA SKILL FAZ
+Fornece especificações técnicas completas e atualizadas para criação e exportação de vídeos em todas as principais plataformas sociais, incluindo:
+
+Resoluções e proporções corretas por plataforma e formato
+Áreas de segurança (safe zones) para cada tipo de conteúdo
+Configurações ideais de exportação (FPS, codec, bitrate, formato de arquivo)
+Orientações anti-compressão para manter qualidade máxima
+Guia visual de como aplicar as dimensões na prática
+
+Consulte os arquivos de referência para mais detalhes:
+
+references/platform-specs.md — Especificações completas por plataforma
+references/export-settings.md — Configurações de exportação por software
+references/safe-zones.md — Guia de áreas de segurança com medidas exatas
+
+
+TABELA MESTRA — DIMENSÕES 2026
+PlataformaFormatoProporçãoResolução (px)FPSInstagramReels9:161080 × 192030InstagramStories9:161080 × 192030InstagramFeed Vertical4:51080 × 135030InstagramFeed Quadrado1:11080 × 108030TikTokVídeos / Stories9:161080 × 192030YouTubeVídeo Padrão16:91920 × 108024/30/60YouTubeShorts9:161080 × 192030FacebookFeed1:1 ou 4:51080 × 1080 ou 1080 × 135030FacebookStories9:161080 × 192030
+
+REGRAS DE OURO — ANTI-COMPRESSÃO
+✅ SEMPRE FAZER:
+
+Exportar em 1080p (Full HD) — nunca em 4K para Instagram/TikTok/Facebook
+Usar codec H.264 — maior compatibilidade e menor compressão
+Formato .MP4 como padrão universal; .MOV para Apple/FCP workflows
+30 FPS como taxa segura para todas as plataformas
+Bitrate recomendado: 8–15 Mbps para 1080p
+
+❌ NUNCA FAZER:
+
+Exportar em 4K para Instagram — a plataforma recomprime brutalmente
+Usar H.265/HEVC como padrão — compatibilidade reduzida
+Ultrapassar 4GB por arquivo — limite de upload de algumas plataformas
+Ignorar as safe zones — elementos importantes ficam cortados pela UI
+
+
+ÁREAS DE SEGURANÇA (SAFE ZONES) — RESUMO
+Para vídeos 9:16 (1080 × 1920):
+┌─────────────────────────────┐  ← Topo: 0px
+│  ⚠️  ZONA DE PERIGO (150px) │  ← Interface do app (câmera, notch)
+├─────────────────────────────┤  ← 150px
+│                             │
+│   ✅  ZONA SEGURA SUPERIOR  │
+│                             │
+│  [Coloque título aqui]      │
+│                             │
+│  [Área principal do vídeo]  │
+│                             │
+│   ✅  ZONA SEGURA INFERIOR  │
+│                             │
+│  [Coloque CTA/texto aqui]   │
+├─────────────────────────────┤  ← 1770px (150px acima do fundo)
+│  ⚠️  ZONA DE PERIGO (150px) │  ← Botões de like, comentário, username
+└─────────────────────────────┘  ← 1920px
+Margens laterais seguras: 50–80px de cada lado
+Zona segura para texto: entre Y=150px e Y=1770px (centro visual)
+
+FLUXO DE TRABALHO — COMO USAR ESTA SKILL
+Quando o usuário perguntar sobre dimensões:
+
+Identificar plataforma(s) alvo
+Identificar formato (feed, stories, reels, shorts, etc.)
+Entregar resolução + proporção + FPS
+Adicionar configuração de exportação relevante
+Alertar sobre safe zones se for formato vertical
+
+Quando o usuário pedir configurações de exportação:
+→ Consultar references/export-settings.md
+Quando o usuário perguntar sobre safe zones:
+→ Consultar references/safe-zones.md
+Quando o usuário perguntar sobre múltiplas plataformas ao mesmo tempo:
+→ Entregar tabela comparativa + recomendar estratégia de master file
+
+ESTRATÉGIA DE MASTER FILE (Para criadores multiplataforma)
+Problema: Criar um vídeo diferente para cada plataforma é ineficiente.
+Solução: Criar um arquivo mestre e adaptar.
+Recomendação de fluxo:
+MASTER FILE: 1080 × 1920 (9:16) — vertical
+     ↓
+     ├── Export 1:1 → cortar laterais para 1080×1080 (Instagram Feed)
+     ├── Export 4:5 → cortar para 1080×1350 (Instagram Feed Vertical)
+     ├── Export 9:16 → direto (TikTok, Reels, Stories, Shorts)
+     └── Export 16:9 → reposicionar elementos (YouTube Padrão)
+Por que começar em 9:16?
+
+Vertical é o formato dominante em 2026
+Mais fácil cortar vertical → outros formatos
+Impossível ampliar horizontal → vertical sem perda de qualidade
+
+
+GUIA RÁPIDO POR PERGUNTA COMUM
+PerguntaResposta direta"Qual resolução para TikTok?"1080 × 1920 px, 9:16, H.264, MP4, 30fps"Qual tamanho para Reels?"1080 × 1920 px, 9:16, máx 15 min"Qual formato para YouTube?"1920 × 1080 px, 16:9, pode usar 60fps"E para YouTube Shorts?"1080 × 1920 px, 9:16, máx 60 segundos"Posso usar 4K no Insta?"❌ Não — comprime demais. Use 1080p"Qual codec usar?"H.264 sempre. H.265 só se a plataforma suportar"MP4 ou MOV?"MP4 para tudo. MOV se workflow Apple"Quantos FPS?"30fps padrão. 60fps só YouTube se o conteúdo exigir"Feed quadrado ou vertical?"4:5 vertical tem mais área de tela = mais atenção

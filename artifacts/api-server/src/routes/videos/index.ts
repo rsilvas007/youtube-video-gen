@@ -14,6 +14,11 @@ import {
   generatePollinationsVideoClips,
 } from "../../lib/video/pollinationsGenerator.js";
 import {
+  generateScriptWithGemini,
+  generateAudioWithGemini,
+  generateImagesWithGemini,
+} from "../../lib/video/geminiGenerator.js";
+import {
   mergeAudios,
   assembleFromClips,
   assembleVideo,
@@ -21,7 +26,8 @@ import {
 
 const router = Router();
 const USE_POLLINATIONS = !!process.env.POLLINATIONS_API_KEY;
-const USE_ELEVENLABS = !!process.env.ELEVENLABS_API_KEY;
+const USE_ELEVENLABS   = !!process.env.ELEVENLABS_API_KEY;
+const USE_GEMINI       = !!process.env.GEMINI_API_KEY;
 
 function getVideoWorkDir(videoId: number): string {
   return path.join(os.tmpdir(), "yt-video-gen", String(videoId));
@@ -51,12 +57,15 @@ router.get("/videos", async (req, res) => {
 });
 
 router.post("/videos", async (req, res) => {
-  const { topic, style, durationMinutes, voice, language } = req.body as {
+  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel } = req.body as {
     topic: string;
     style: string;
     durationMinutes: number;
     voice: string;
     language?: string;
+    imageModel?: string;
+    videoModel?: string;
+    scriptModel?: string;
   };
 
   if (!topic || !style || !durationMinutes || !voice) {
@@ -72,6 +81,9 @@ router.post("/videos", async (req, res) => {
       durationMinutes,
       voice,
       language: language ?? "pt-BR",
+      imageModel: imageModel ?? "flux-realism",
+      videoModel: videoModel ?? "seedance",
+      scriptModel: scriptModel ?? "gemini-2.5-flash",
     })
     .returning();
 
@@ -117,41 +129,48 @@ router.post("/videos/:id/generate", async (req, res) => {
   res.flushHeaders();
 
   const sendEvent = (step: string, message: string, progress: number) => {
-    res.write(
-      `data: ${JSON.stringify({ step, message, progress })}\n\n`
-    );
+    res.write(`data: ${JSON.stringify({ step, message, progress })}\n\n`);
   };
 
-  const workDir = getVideoWorkDir(id);
-  const audioDir = path.join(workDir, "audio");
+  const workDir   = getVideoWorkDir(id);
+  const audioDir  = path.join(workDir, "audio");
   const imagesDir = path.join(workDir, "images");
-  const clipsDir = path.join(workDir, "clips");
+  const clipsDir  = path.join(workDir, "clips");
   const outputDir = path.join(workDir, "output");
 
   try {
     fs.mkdirSync(workDir, { recursive: true });
 
-    // ─── STEP 1: SCRIPT ────────────────────────────────────────────
-    sendEvent("script", "Gerando roteiro com IA...", 5);
+    // ─── STEP 1: SCRIPT ───────────────────────────────────────────────────────
+    const scriptModel = video.scriptModel ?? "gemini-2.5-flash";
+    const useGeminiScript = USE_GEMINI && scriptModel.startsWith("gemini");
+    const scriptLabel = useGeminiScript ? `Google ${scriptModel}` : `OpenAI ${scriptModel}`;
+
+    sendEvent("script", `✍️ Gerando roteiro com ${scriptLabel}...`, 5);
     await updateVideo(id, { status: "generating_script", progress: 5 });
 
-    const blocks = await generateScript(
-      video.topic,
-      video.style,
-      video.durationMinutes,
-      video.language
-    );
+    let blocks;
+    if (useGeminiScript) {
+      blocks = await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel);
+    } else {
+      blocks = await generateScript(video.topic, video.style, video.durationMinutes, video.language);
+    }
+
     sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
     await updateVideo(id, { progress: 15 });
 
-    // ─── STEP 2: AUDIO ─────────────────────────────────────────────
-    const useElevenLabs = USE_ELEVENLABS && video.voice.length > 20; // ElevenLabs voice IDs are long UUIDs
-    const audioLabel = useElevenLabs ? "ElevenLabs (controle emocional por bloco)" : "OpenAI TTS";
+    // ─── STEP 2: AUDIO ────────────────────────────────────────────────────────
+    const isElevenLabs = USE_ELEVENLABS && video.voice.length > 20 && !video.voice.startsWith("gemini-tts:");
+    const isGeminiTts  = USE_GEMINI && video.voice.startsWith("gemini-tts:");
+    const audioLabel   = isGeminiTts ? "Google Gemini TTS" : isElevenLabs ? "ElevenLabs" : "OpenAI TTS";
+
     sendEvent("audio", `🎙️ Gerando áudios com ${audioLabel}...`, 18);
     await updateVideo(id, { status: "generating_audio", progress: 18 });
 
     let audioPaths: string[];
-    if (useElevenLabs) {
+    if (isGeminiTts) {
+      audioPaths = await generateAudioWithGemini(blocks, audioDir, video.voice);
+    } else if (isElevenLabs) {
       audioPaths = await generateAudioWithElevenLabs(blocks, audioDir, video.voice);
     } else {
       audioPaths = await generateAudio(blocks, audioDir, video.voice);
@@ -165,28 +184,45 @@ router.post("/videos/:id/generate", async (req, res) => {
     sendEvent("audio", "Todos os áudios gerados.", 35);
     await updateVideo(id, { progress: 35 });
 
-    // ─── STEP 3: IMAGES ────────────────────────────────────────────
-    const fullAudioPath = await mergeAudios(audioPaths, outputDir);
+    const fullAudioPath  = await mergeAudios(audioPaths, outputDir);
     const outputVideoPath = path.join(outputDir, "video_final.mp4");
 
-    if (USE_POLLINATIONS) {
-      sendEvent("images", "🎨 Gerando imagens cinematográficas com Pollinations.ai...", 37);
+    // ─── STEP 3: IMAGES ───────────────────────────────────────────────────────
+    const imageModel = video.imageModel ?? "flux-realism";
+    const useGeminiImg = USE_GEMINI && (imageModel.startsWith("gemini-") || imageModel.startsWith("nano-"));
+
+    let imagePaths: string[];
+
+    if (useGeminiImg) {
+      sendEvent("images", `🖼️ Gerando imagens com Google ${imageModel}...`, 37);
       await updateVideo(id, { status: "generating_images", progress: 37 });
+      imagePaths = await generateImagesWithGemini(blocks, imagesDir, video.style, imageModel);
+    } else if (USE_POLLINATIONS) {
+      sendEvent("images", `🎨 Gerando imagens com Pollinations (${imageModel})...`, 37);
+      await updateVideo(id, { status: "generating_images", progress: 37 });
+      imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, imageModel);
+    } else {
+      sendEvent("images", "Gerando imagens com OpenAI...", 37);
+      await updateVideo(id, { status: "generating_images", progress: 37 });
+      imagePaths = await generateImages(blocks, imagesDir, video.style);
+    }
 
-      const imagePaths = await generatePollinationsImages(blocks, imagesDir, video.style, video.imageModel);
-      for (let i = 0; i < imagePaths.length; i++) {
-        const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
-        sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada com Pollinations.`, pct);
-        await updateVideo(id, { progress: pct });
-      }
-      sendEvent("images", "Todas as imagens geradas.", 55);
-      await updateVideo(id, { progress: 55 });
+    for (let i = 0; i < imagePaths.length; i++) {
+      const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
+      sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
+      await updateVideo(id, { progress: pct });
+    }
+    sendEvent("images", "Todas as imagens geradas.", 55);
+    await updateVideo(id, { progress: 55 });
 
-      // ─── STEP 4: VIDEO CLIPS (Pollinations) ─────────────────────
-      sendEvent("video", "🎬 Gerando clipes de vídeo com IA (Seedance/Wan)...", 57);
+    // ─── STEP 4: VIDEO CLIPS ──────────────────────────────────────────────────
+    const videoModel = video.videoModel ?? "seedance";
+
+    if (USE_POLLINATIONS && !videoModel.startsWith("ken-burns")) {
+      sendEvent("video", `🎬 Gerando clipes com Pollinations (${videoModel})...`, 57);
       await updateVideo(id, { status: "generating_clips", progress: 57 });
 
-      const rawClipPaths = await generatePollinationsVideoClips(blocks, audioPaths, clipsDir, video.videoModel);
+      const rawClipPaths = await generatePollinationsVideoClips(blocks, audioPaths, clipsDir, videoModel);
 
       const successClips: string[] = [];
       const failedIndexes: number[] = [];
@@ -196,7 +232,7 @@ router.post("/videos/:id/generate", async (req, res) => {
         const pct = 57 + Math.round((i + 1) * (28 / rawClipPaths.length));
         if (p.startsWith("__FAILED__:")) {
           failedIndexes.push(i);
-          sendEvent("video", `⚠️ Clipe ${i + 1} falhou, usando imagem animada como fallback.`, pct);
+          sendEvent("video", `⚠️ Clipe ${i + 1} falhou, usando imagem animada.`, pct);
         } else {
           successClips.push(p);
           sendEvent("video", `✅ Clipe ${i + 1}/${blocks.length} gerado.`, pct);
@@ -208,57 +244,29 @@ router.post("/videos/:id/generate", async (req, res) => {
       await updateVideo(id, { status: "assembling_video", progress: 87 });
 
       if (successClips.length === blocks.length) {
-        // All clips succeeded — concat them directly
         await assembleFromClips(successClips, fullAudioPath, outputVideoPath);
       } else if (successClips.length > 0) {
-        // Some failed — mix real clips with Ken Burns on failed blocks
-        const resolvedPaths: string[] = [];
-        for (let i = 0; i < rawClipPaths.length; i++) {
-          if (!rawClipPaths[i].startsWith("__FAILED__:")) {
-            resolvedPaths.push(rawClipPaths[i]);
-          } else {
-            resolvedPaths.push(imagePaths[i]);
-          }
-        }
+        const resolvedPaths = rawClipPaths.map((p, i) =>
+          p.startsWith("__FAILED__:") ? imagePaths[i] : p
+        );
         await assembleFromClips(resolvedPaths, fullAudioPath, outputVideoPath);
       } else {
-        // All clips failed — fall back to full zoompan
-        sendEvent("video", "⚠️ Clipes indisponíveis, usando animação dinâmica de imagens...", 87);
+        sendEvent("video", "⚠️ Usando animação dinâmica de imagens...", 87);
         await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
       }
-
     } else {
-      // No Pollinations key — use OpenAI for images + zoompan animation
-      sendEvent("images", "Gerando imagens cinematográficas com IA...", 37);
-      await updateVideo(id, { status: "generating_images", progress: 37 });
-
-      const imagePaths = await generateImages(blocks, imagesDir, video.style);
-      for (let i = 0; i < imagePaths.length; i++) {
-        const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
-        sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
-        await updateVideo(id, { progress: pct });
-      }
-      sendEvent("images", "Todas as imagens geradas.", 55);
-
       sendEvent("video", "Montando vídeo com animações sincronizadas ao áudio...", 60);
       await updateVideo(id, { status: "assembling_video", progress: 60 });
-
       await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
     }
 
     sendEvent("video", "Vídeo montado com sucesso!", 95);
-    await updateVideo(id, {
-      status: "done",
-      progress: 100,
-      outputPath: outputVideoPath,
-    });
-
+    await updateVideo(id, { status: "done", progress: 100, outputPath: outputVideoPath });
     sendEvent("done", "Finalizado! Seu vídeo está pronto para download.", 100);
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Erro desconhecido no pipeline.";
+    const message = err instanceof Error ? err.message : "Erro desconhecido no pipeline.";
     sendEvent("error", `Erro: ${message}`, 0);
     await updateVideo(id, { status: "error", errorMessage: message });
     res.write(`data: ${JSON.stringify({ done: true, error: message })}\n\n`);

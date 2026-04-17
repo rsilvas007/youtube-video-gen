@@ -9,6 +9,7 @@ export const videosTable = pgTable("videos", {
   durationMinutes: integer("duration_minutes").notNull().default(8),
   voice: text("voice").notNull().default("alloy"),
   language: text("language").notNull().default("pt-BR"),
+  scriptModel: text("script_model").notNull().default("gemini-2.5-flash"),
   imageModel: text("image_model").notNull().default("flux-realism"),
   videoModel: text("video_model").notNull().default("seedance"),
   status: text("status").notNull().default("pending"),
