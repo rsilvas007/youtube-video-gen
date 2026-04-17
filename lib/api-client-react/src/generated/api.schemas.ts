@@ -32,6 +32,10 @@ export interface CreateVideoBody {
   imageModel?: string;
   /** Video generation model (e.g. seedance, ken-burns) */
   videoModel?: string;
+  /** User-provided custom script (overrides AI generation) */
+  customScript?: string;
+  /** Subtitle style: none | clean | bold | neon | cinematic | karaoke | viral | typewriter */
+  subtitleStyle?: string;
 }
 
 export interface Video {

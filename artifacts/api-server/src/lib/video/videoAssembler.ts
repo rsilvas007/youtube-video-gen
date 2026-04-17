@@ -245,3 +245,28 @@ export async function assembleVideo(
   }
   try { fs.unlinkSync(tempVideoPath); } catch { }
 }
+
+// ─── BURN SUBTITLES INTO VIDEO ────────────────────────────────────────────────
+// Takes a completed video and burns ASS subtitles into it.
+// Uses a second libx264 pass — the ASS filter renders text directly into frames.
+export async function burnSubtitles(
+  inputVideoPath: string,
+  assFilePath: string,
+  outputPath: string,
+): Promise<void> {
+  // FFmpeg ass filter requires POSIX path with escaped colons/backslashes
+  const normalized = assFilePath.replace(/\\/g, "/");
+  // On Linux this is simply the path; escape colons just in case (Windows drives)
+  const escaped = normalized.replace(/:/g, "\\:");
+
+  await runFFmpeg([
+    "-y",
+    "-i", inputVideoPath,
+    "-vf", `ass='${escaped}'`,
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-crf", "20",
+    "-c:a", "copy",
+    outputPath,
+  ]);
+}

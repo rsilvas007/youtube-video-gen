@@ -14,6 +14,7 @@ export const videosTable = pgTable("videos", {
   imageModel: text("image_model").notNull().default("flux-realism"),
   videoModel: text("video_model").notNull().default("seedance"),
   customScript: text("custom_script"),
+  subtitleStyle: text("subtitle_style").notNull().default("none"),
   youtubeTitles: text("youtube_titles"),
   youtubeDescription: text("youtube_description"),
   youtubeTags: text("youtube_tags"),

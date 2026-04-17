@@ -131,6 +131,18 @@ const OPENAI_VOICES = [
   { id: "verse",   name: "Verse",   desc: "Expressivo" },
 ];
 
+// ─── SUBTITLE STYLES ──────────────────────────────────────────────────────────
+const SUBTITLE_STYLES = [
+  { value: "none",       label: "Sem Legenda",     emoji: "🚫", preview: "—",                         color: "text-muted-foreground" },
+  { value: "clean",      label: "Limpa",            emoji: "⬜", preview: "Texto Limpo",               color: "text-white" },
+  { value: "bold",       label: "Bold CapCut",      emoji: "⚡", preview: "BOLD AMARELO",              color: "text-yellow-400 font-black" },
+  { value: "neon",       label: "Neon Rosa",        emoji: "🌈", preview: "NEON",                      color: "text-pink-400 font-bold" },
+  { value: "cinematic",  label: "Cinemático",       emoji: "🎬", preview: "Cinematográfico",           color: "text-white/80 italic" },
+  { value: "karaoke",    label: "Karaokê",          emoji: "🎤", preview: "Palavra a Palavra",         color: "text-cyan-300 font-bold" },
+  { value: "viral",      label: "VIRAL",            emoji: "🔥", preview: "🔥 VIRAL! 🔥",              color: "text-white font-black" },
+  { value: "typewriter", label: "Typewriter",       emoji: "💻", preview: "green_hack_mode",           color: "text-green-400 font-mono" },
+];
+
 // ─── PLATFORMS ────────────────────────────────────────────────────────────────
 const PLATFORMS = [
   { value: "youtube",            label: "YouTube",               ratio: "16:9", res: "1920×1080",  icon: "▶" },
@@ -153,6 +165,7 @@ const videoFormSchema = z.object({
   imageModel: z.string().default("flux-realism"),
   videoModel: z.string().default("seedance"),
   customScript: z.string().optional(),
+  subtitleStyle: z.string().default("none"),
 });
 
 type VideoFormValues = z.infer<typeof videoFormSchema>;
@@ -273,6 +286,7 @@ export function VideoForm() {
       scriptModel: "gemini-2.5-flash",
       imageModel: "flux-realism",
       videoModel: "seedance",
+      subtitleStyle: "none",
     },
   });
 
@@ -649,6 +663,56 @@ export function VideoForm() {
                       />
                     ))}
                   </div>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Subtitle Style Picker */}
+          <FormField
+            control={form.control}
+            name="subtitleStyle"
+            render={({ field }) => (
+              <FormItem>
+                <div className="border border-border/40 rounded-lg bg-background/30 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30">
+                    <span className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold flex items-center gap-1">
+                      💬 Legendas Dinâmicas
+                    </span>
+                    <span className="text-xs text-primary/70 font-mono">
+                      {SUBTITLE_STYLES.find(s => s.value === field.value)?.label ?? "Sem Legenda"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-px bg-border/20 p-1">
+                    {SUBTITLE_STYLES.map((style) => (
+                      <button
+                        key={style.value}
+                        type="button"
+                        onClick={() => field.onChange(style.value)}
+                        className={`flex flex-col items-center justify-center gap-0.5 py-2.5 px-1 rounded transition-all text-center ${
+                          field.value === style.value
+                            ? "bg-primary/15 border border-primary/50 shadow-sm"
+                            : "bg-background/40 border border-transparent hover:bg-muted/30"
+                        }`}
+                      >
+                        <span className="text-lg leading-none">{style.emoji}</span>
+                        <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground leading-tight mt-1">
+                          {style.label}
+                        </span>
+                        <span className={`text-[8px] leading-tight ${style.color} mt-0.5 truncate w-full`}>
+                          {style.preview}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {field.value !== "none" && (
+                    <div className="px-3 py-1.5 border-t border-border/20 bg-primary/5">
+                      <p className="text-[10px] text-primary/70 font-mono">
+                        ✨ Legendas "{SUBTITLE_STYLES.find(s => s.value === field.value)?.label}" serão queimadas no vídeo automaticamente.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <FormMessage />
               </FormItem>

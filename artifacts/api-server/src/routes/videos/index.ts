@@ -25,7 +25,11 @@ import {
   mergeAudios,
   assembleFromClips,
   assembleVideo,
+  burnSubtitles,
+  getAudioDurations,
+  PLATFORM_SPECS,
 } from "../../lib/video/videoAssembler.js";
+import { generateASSSubtitles } from "../../lib/video/subtitleGenerator.js";
 
 const router = Router();
 const USE_POLLINATIONS = !!process.env.POLLINATIONS_API_KEY;
@@ -336,7 +340,46 @@ router.post("/videos/:id/generate", async (req, res) => {
       await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath, vPlatform);
     }
 
-    sendEvent("video", "Vídeo montado com sucesso!", 95);
+    sendEvent("video", "Vídeo montado com sucesso!", 92);
+    await updateVideo(id, { progress: 92 });
+
+    // ─── STEP 5: SUBTITLES ────────────────────────────────────────────────────
+    const subtitleStyle = video.subtitleStyle ?? "none";
+    if (subtitleStyle !== "none") {
+      try {
+        sendEvent("subtitles", `💬 Gerando legendas estilo "${subtitleStyle}"...`, 93);
+        await updateVideo(id, { progress: 93 });
+
+        const assPath = path.join(outputDir, "subtitles.ass");
+        const subtitledPath = path.join(outputDir, "video_subtitled.mp4");
+        const spec = PLATFORM_SPECS[video.platform ?? "youtube"] ?? PLATFORM_SPECS["youtube"];
+        const audioDurs = await getAudioDurations(audioPaths);
+
+        const subtitleBlocks = blocks.map((b, i) => ({ blockNumber: i + 1, text: b.text ?? "" }));
+        const generated = generateASSSubtitles(
+          subtitleBlocks,
+          audioDurs,
+          subtitleStyle,
+          assPath,
+          spec.w,
+          spec.h,
+        );
+
+        if (generated) {
+          sendEvent("subtitles", "🎨 Renderizando legendas no vídeo...", 95);
+          await updateVideo(id, { progress: 95 });
+          await burnSubtitles(outputVideoPath, assPath, subtitledPath);
+          fs.renameSync(subtitledPath, outputVideoPath);
+          sendEvent("subtitles", "✅ Legendas aplicadas!", 97);
+          await updateVideo(id, { progress: 97 });
+        }
+      } catch (subErr) {
+        const msg = subErr instanceof Error ? subErr.message : String(subErr);
+        console.error("Subtitle generation failed (non-fatal):", msg);
+        sendEvent("subtitles", `⚠️ Legendas falharam (vídeo sem legenda): ${msg.slice(0, 80)}`, 97);
+      }
+    }
+
     await updateVideo(id, { status: "done", progress: 100, outputPath: outputVideoPath });
     sendEvent("done", "Finalizado! Seu vídeo está pronto para download.", 100);
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
