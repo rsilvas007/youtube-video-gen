@@ -144,6 +144,37 @@ function geminiPost(endpoint: string, body: object, timeoutMs = 120_000): Promis
   });
 }
 
+// Wrapper with automatic retry for transient Gemini errors (503, 429, network)
+async function geminiPostWithRetry(
+  endpoint: string,
+  body: object,
+  timeoutMs = 120_000,
+  maxAttempts = 5
+): Promise<unknown> {
+  let lastError: Error = new Error("Unknown error");
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await geminiPost(endpoint, body, timeoutMs);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const msg = lastError.message;
+      const is503 = msg.includes("503");
+      const is429 = msg.includes("429");
+      const isTimeout = msg.includes("timeout");
+      const isRetryable = is503 || is429 || isTimeout;
+
+      if (!isRetryable || attempt === maxAttempts) throw lastError;
+
+      // 503 overloaded: 10s, 20s, 30s, 40s
+      // 429 quota:      30s, 60s, 90s, 120s
+      const baseDelay = is429 ? 30_000 : 10_000;
+      const delay = baseDelay * attempt;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastError;
+}
+
 // ─── SCRIPT GENERATION ───────────────────────────────────────────────────────
 export async function generateScriptWithGemini(
   topic: string,
@@ -191,7 +222,7 @@ CHECKLIST:
 ✅ Há 2+ loops abertos que não fecham completamente?
 ✅ Clímax emocional está no bloco 8?`;
 
-  const resp = await geminiPost(`${model}:generateContent`, {
+  const resp = await geminiPostWithRetry(`${model}:generateContent`, {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 8192, temperature: 0.8 },
   }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -281,7 +312,7 @@ export async function generateAudioWithGemini(
 
     while (attempts < 3) {
       try {
-        const resp = await geminiPost(`${ttsModel}:generateContent`, {
+        const resp = await geminiPostWithRetry(`${ttsModel}:generateContent`, {
           contents: [{ parts: [{ text: textWithHint }] }],
           generationConfig: {
             responseModalities: ["AUDIO"],
@@ -364,41 +395,20 @@ export async function generateImagesWithGemini(
 
     const outputPath = path.join(imagesDir, `img_${String(block.blockNumber).padStart(2, "0")}.png`);
 
-    let attempts = 0;
-    let lastError: Error | null = null;
-    const MAX_ATTEMPTS = 4;
+    const resp = await geminiPostWithRetry(`${imageModel}:generateContent`, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+    }) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
+      }>
+    };
 
-    while (attempts < MAX_ATTEMPTS) {
-      try {
-        const resp = await geminiPost(`${imageModel}:generateContent`, {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
-        }) as {
-          candidates?: Array<{
-            content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
-          }>
-        };
+    const parts = resp?.candidates?.[0]?.content?.parts ?? [];
+    const imgPart = parts.find((p) => p.inlineData?.mimeType?.startsWith("image/"));
+    if (!imgPart?.inlineData?.data) throw new Error(`No image data for block ${block.blockNumber}`);
 
-        const parts = resp?.candidates?.[0]?.content?.parts ?? [];
-        const imgPart = parts.find((p) => p.inlineData?.mimeType?.startsWith("image/"));
-        if (!imgPart?.inlineData?.data) throw new Error(`No image data for block ${block.blockNumber}`);
-
-        fs.writeFileSync(outputPath, Buffer.from(imgPart.inlineData.data, "base64"));
-        lastError = null;
-        break;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        attempts++;
-        if (attempts < MAX_ATTEMPTS) {
-          // 429 quota: wait much longer before retrying (30s, 60s, 90s)
-          const is429 = lastError.message.includes("429");
-          const delay = is429 ? 30_000 * attempts : 5_000 * attempts;
-          await new Promise((r) => setTimeout(r, delay));
-        }
-      }
-    }
-
-    if (lastError) throw lastError;
+    fs.writeFileSync(outputPath, Buffer.from(imgPart.inlineData.data, "base64"));
     imagePaths.push(outputPath);
   }
 
@@ -445,7 +455,7 @@ PROMPT: [image prompt for block 2]
 THE USER'S SCRIPT:
 ${customScript}`;
 
-  const resp = await geminiPost(`${model}:generateContent`, {
+  const resp = await geminiPostWithRetry(`${model}:generateContent`, {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
   }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -531,7 +541,7 @@ ORIGINAL PROMPTS TO IMPROVE:
 ${promptsText}`;
 
   try {
-    const resp = await geminiPost(`${model}:generateContent`, {
+    const resp = await geminiPostWithRetry(`${model}:generateContent`, {
       contents: [{ parts: [{ text: enhancePrompt }] }],
       generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
     }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -604,7 +614,7 @@ RETURN ONLY valid JSON with this EXACT structure:
   };
 
   try {
-    const resp = await geminiPost(`${model}:generateContent`, {
+    const resp = await geminiPostWithRetry(`${model}:generateContent`, {
       contents: [{ parts: [{ text: metaPrompt }] }],
       generationConfig: { maxOutputTokens: 2048, temperature: 0.8, responseMimeType: "application/json" },
     }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
