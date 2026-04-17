@@ -153,11 +153,23 @@ const PLATFORMS = [
   { value: "instagram-vertical", label: "Instagram Vertical",     ratio: "4:5",  res: "1080×1350",  icon: "📱" },
 ];
 
+// ─── DURATION PRESETS ─────────────────────────────────────────────────────────
+const DURATION_PRESETS = [
+  { value: 0.5, label: "30s",    sub: "3 cenas",  tag: "Shorts/Reels",   color: "text-yellow-400" },
+  { value: 1,   label: "1 min",  sub: "4 cenas",  tag: "TikTok/Reels",   color: "text-pink-400" },
+  { value: 2,   label: "2 min",  sub: "5 cenas",  tag: "TikTok",         color: "text-cyan-400" },
+  { value: 3,   label: "3 min",  sub: "6 cenas",  tag: "YouTube",        color: "text-red-400" },
+  { value: 5,   label: "5 min",  sub: "8 cenas",  tag: "YouTube",        color: "text-red-400" },
+  { value: 8,   label: "8 min",  sub: "10 cenas", tag: "YouTube Longo",  color: "text-orange-400" },
+  { value: 10,  label: "10 min", sub: "10 cenas", tag: "YouTube+",       color: "text-primary" },
+  { value: 15,  label: "15 min", sub: "10 cenas", tag: "YouTube Max",    color: "text-purple-400" },
+];
+
 // ─── SCHEMA ───────────────────────────────────────────────────────────────────
 const videoFormSchema = z.object({
   topic: z.string().min(3, "O tema é obrigatório").max(200),
   style: z.enum(["curioso", "misterioso", "educativo", "dramático"]),
-  durationMinutes: z.coerce.number().min(8).max(15),
+  durationMinutes: z.coerce.number().min(0.5).max(15),
   voice: z.string().min(1, "Selecione uma voz"),
   language: z.string().default("pt-BR"),
   platform: z.string().default("youtube"),
@@ -422,46 +434,76 @@ export function VideoForm() {
             )}
           />
 
-          {/* Style + Duration */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <FormField
-              control={form.control}
-              name="style"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Estilo</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                        <SelectValue placeholder="Selecione o estilo" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-popover border-border">
-                      <SelectItem value="curioso">Curioso</SelectItem>
-                      <SelectItem value="misterioso">Misterioso</SelectItem>
-                      <SelectItem value="educativo">Educativo</SelectItem>
-                      <SelectItem value="dramático">Dramático</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="durationMinutes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Duração (Min)</FormLabel>
+          {/* Style */}
+          <FormField
+            control={form.control}
+            name="style"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono">Estilo</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <Input type="number" min={8} max={15} className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
+                    <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
+                      <SelectValue placeholder="Selecione o estilo" />
+                    </SelectTrigger>
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="curioso">Curioso</SelectItem>
+                    <SelectItem value="misterioso">Misterioso</SelectItem>
+                    <SelectItem value="educativo">Educativo</SelectItem>
+                    <SelectItem value="dramático">Dramático</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Duration Preset Picker */}
+          <FormField
+            control={form.control}
+            name="durationMinutes"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between mb-2">
+                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono m-0">⏱ Duração</FormLabel>
+                  <span className="text-xs text-primary/70 font-mono font-semibold">
+                    {DURATION_PRESETS.find(p => p.value === field.value)?.label ?? `${field.value} min`}
+                    {" — "}
+                    <span className="text-muted-foreground">{DURATION_PRESETS.find(p => p.value === field.value)?.sub ?? ""}</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {DURATION_PRESETS.map((preset) => {
+                    const isSelected = field.value === preset.value;
+                    return (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() => field.onChange(preset.value)}
+                        className={`flex flex-col items-center justify-center gap-0.5 py-3 px-1 rounded-lg border transition-all text-center ${
+                          isSelected
+                            ? "border-primary bg-primary/10 shadow-sm shadow-primary/20"
+                            : "border-border/40 bg-background/30 hover:border-border hover:bg-muted/20"
+                        }`}
+                      >
+                        <span className={`text-sm font-black leading-none font-mono ${isSelected ? "text-primary" : "text-foreground"}`}>
+                          {preset.label}
+                        </span>
+                        <span className={`text-[9px] font-mono mt-1 leading-tight ${isSelected ? preset.color : "text-muted-foreground/60"}`}>
+                          {preset.tag}
+                        </span>
+                        <span className="text-[8px] text-muted-foreground/40 font-mono mt-0.5">
+                          {preset.sub}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {/* AI Models Section */}
           <div className="border border-border/40 rounded-lg p-4 space-y-4 bg-background/30">

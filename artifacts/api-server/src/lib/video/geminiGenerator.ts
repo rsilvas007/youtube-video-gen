@@ -150,12 +150,14 @@ export async function generateScriptWithGemini(
   style: string,
   durationMinutes: number,
   language: string,
-  model: string = "gemini-2.5-flash"
+  model: string = "gemini-2.5-flash",
+  blockCount: number = 10
 ): Promise<ScriptBlock[]> {
-  const wordsPerBlock = Math.round((durationMinutes * 130) / 10);
+  const n = Math.min(blockCount, BLOCK_BLUEPRINT.length);
+  const wordsPerBlock = Math.round((durationMinutes * 130) / n);
 
-  const blocksSpec = BLOCK_BLUEPRINT.map((blueprint, i) => {
-    const visual = VISUAL_SEQUENCE[i];
+  const blocksSpec = BLOCK_BLUEPRINT.slice(0, n).map((blueprint, i) => {
+    const visual = VISUAL_SEQUENCE[i % VISUAL_SEQUENCE.length];
     return `
 ===BLOCO ${i + 1}===
 PAPEL NARRATIVO: ${blueprint.role}
@@ -195,13 +197,13 @@ CHECKLIST:
   }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
 
   const content = resp?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  return parseGeminiScript(content);
+  return parseGeminiScript(content, n);
 }
 
-function parseGeminiScript(content: string): ScriptBlock[] {
+function parseGeminiScript(content: string, n: number = 10): ScriptBlock[] {
   const blocks: ScriptBlock[] = [];
 
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= n; i++) {
     const pat = new RegExp(
       `===BLOCO ${i}===[\\s\\S]*?NARRAÇÃO[^:]*:\\s*([\\s\\S]*?)PROMPT DE IMAGEM[^:]*:\\s*([\\s\\S]*?)===FIM_BLOCO ${i}===`,
       "i"
@@ -210,14 +212,15 @@ function parseGeminiScript(content: string): ScriptBlock[] {
     if (match) {
       const text = match[1].trim().replace(/^\[.*?\]\s*/, "").trim();
       const imagePrompt = match[2].trim().replace(/^\[.*?\]\s*/, "").trim();
-      const visual = VISUAL_SEQUENCE[i - 1];
+      const visual = VISUAL_SEQUENCE[(i - 1) % VISUAL_SEQUENCE.length];
       if (text && imagePrompt) {
         blocks.push({ blockNumber: i, text, imagePrompt, cameraMovement: visual.camera, visualType: visual.type });
       }
     }
   }
 
-  if (blocks.length < 5) {
+  // Fallback: regex scan if fewer than half the expected blocks were found
+  if (blocks.length < Math.ceil(n / 2)) {
     blocks.length = 0;
     const re = /===BLOCO (\d+)===([\s\S]*?)===FIM_BLOCO \1===/g;
     let m;
@@ -226,7 +229,7 @@ function parseGeminiScript(content: string): ScriptBlock[] {
       const bc = m[2];
       const nar = bc.match(/NARRAÇÃO[^:]*:([\s\S]*?)(?:PROMPT|$)/i)?.[1]?.trim() ?? "";
       const prm = bc.match(/PROMPT[^:]*:([\s\S]*?)$/i)?.[1]?.trim() ?? "";
-      const visual = VISUAL_SEQUENCE[(bn - 1) % 10];
+      const visual = VISUAL_SEQUENCE[(bn - 1) % VISUAL_SEQUENCE.length];
       if (nar) blocks.push({
         blockNumber: bn,
         text: nar.replace(/^\[.*?\]\s*/, "").trim(),
@@ -237,7 +240,7 @@ function parseGeminiScript(content: string): ScriptBlock[] {
     }
   }
 
-  return blocks.slice(0, 10);
+  return blocks.slice(0, n);
 }
 
 // ─── TTS GENERATION ──────────────────────────────────────────────────────────

@@ -40,9 +40,11 @@ export async function generateScript(
   topic: string,
   style: string,
   durationMinutes: number,
-  language: string
+  language: string,
+  blockCount: number = 10
 ): Promise<ScriptBlock[]> {
-  const wordsPerBlock = Math.round((durationMinutes * 130) / 10);
+  const n = Math.min(blockCount, BLOCK_BLUEPRINT.length);
+  const wordsPerBlock = Math.round((durationMinutes * 130) / n);
 
   const systemPrompt = `Você é o melhor roteirista de YouTube do mundo para vídeos documentários de tecnologia.
 Seu trabalho é criar roteiros que PRENDAM o espectador do primeiro ao último segundo.
@@ -56,8 +58,8 @@ REGRAS ABSOLUTAS QUE NUNCA PODEM SER QUEBRADAS:
 5. Cada bloco deve conectar cinematograficamente ao próximo
 6. Os prompts de imagem NUNCA podem repetir o mesmo ângulo, iluminação ou tipo visual que o bloco anterior`;
 
-  const blocksSpec = BLOCK_BLUEPRINT.map((blueprint, i) => {
-    const visual = VISUAL_SEQUENCE[i];
+  const blocksSpec = BLOCK_BLUEPRINT.slice(0, n).map((blueprint, i) => {
+    const visual = VISUAL_SEQUENCE[i % VISUAL_SEQUENCE.length];
     return `
 ===BLOCO ${i + 1}===
 PAPEL NARRATIVO: ${blueprint.role}
@@ -78,7 +80,7 @@ PROMPT DE IMAGEM (em inglês, 60-80 palavras, incluindo: perspectiva ${visual.ty
 
 TEMA: "${topic}"
 
-Siga EXATAMENTE a estrutura abaixo para os 10 blocos. Cada bloco tem um papel narrativo específico e um tipo visual OBRIGATÓRIO diferente para garantir que nunca haja duas cenas consecutivas iguais.
+Siga EXATAMENTE a estrutura abaixo para os ${n} blocos. Cada bloco tem um papel narrativo específico e um tipo visual OBRIGATÓRIO diferente para garantir que nunca haja duas cenas consecutivas iguais.
 
 ${blocksSpec}
 

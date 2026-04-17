@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -6,7 +6,7 @@ export const videosTable = pgTable("videos", {
   id: serial("id").primaryKey(),
   topic: text("topic").notNull(),
   style: text("style").notNull(),
-  durationMinutes: integer("duration_minutes").notNull().default(8),
+  durationMinutes: real("duration_minutes").notNull().default(8),
   voice: text("voice").notNull().default("alloy"),
   language: text("language").notNull().default("pt-BR"),
   platform: text("platform").notNull().default("youtube"),

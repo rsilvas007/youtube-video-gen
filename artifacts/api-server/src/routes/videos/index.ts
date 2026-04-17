@@ -84,8 +84,18 @@ router.delete("/videos/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Helper: scale block count with duration
+function getBlockCount(durationMinutes: number): number {
+  if (durationMinutes <= 0.75) return 3;
+  if (durationMinutes <= 1.5)  return 4;
+  if (durationMinutes <= 2.5)  return 5;
+  if (durationMinutes <= 4)    return 6;
+  if (durationMinutes <= 6.5)  return 8;
+  return 10;
+}
+
 router.post("/videos", async (req, res) => {
-  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel, platform, customScript } = req.body as {
+  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel, platform, customScript, subtitleStyle } = req.body as {
     topic: string;
     style: string;
     durationMinutes: number;
@@ -96,6 +106,7 @@ router.post("/videos", async (req, res) => {
     scriptModel?: string;
     platform?: string;
     customScript?: string;
+    subtitleStyle?: string;
   };
 
   if (!topic || !style || !durationMinutes || !voice) {
@@ -116,6 +127,7 @@ router.post("/videos", async (req, res) => {
       imageModel: imageModel ?? "flux-realism",
       videoModel: videoModel ?? "seedance",
       customScript: customScript?.trim() || null,
+      subtitleStyle: subtitleStyle ?? "none",
     })
     .returning();
 
@@ -203,8 +215,8 @@ router.post("/videos/:id/generate", async (req, res) => {
       sendEvent("script", `✍️ Gerando roteiro com ${scriptLabel}...`, 5);
       await updateVideo(id, { status: "generating_script", progress: 5 });
       blocks = useGeminiScript
-        ? await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel)
-        : await generateScript(video.topic, video.style, video.durationMinutes, video.language);
+        ? await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel, getBlockCount(video.durationMinutes))
+        : await generateScript(video.topic, video.style, video.durationMinutes, video.language, getBlockCount(video.durationMinutes));
       sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
     }
 
