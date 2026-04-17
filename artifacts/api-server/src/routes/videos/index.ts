@@ -62,6 +62,23 @@ router.get("/videos", async (req, res) => {
   res.json(videos);
 });
 
+router.delete("/videos", async (req, res) => {
+  const { status } = req.query;
+  if (status) {
+    await db.delete(videosTable).where(eq(videosTable.status, String(status)));
+  } else {
+    await db.delete(videosTable);
+  }
+  res.json({ ok: true });
+});
+
+router.delete("/videos/:id", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(videosTable).where(eq(videosTable.id, id));
+  res.json({ ok: true });
+});
+
 router.post("/videos", async (req, res) => {
   const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel, platform } = req.body as {
     topic: string;

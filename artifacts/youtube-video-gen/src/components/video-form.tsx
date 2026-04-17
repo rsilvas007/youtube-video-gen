@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,8 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp, Mic, FileText, Monitor } from "lucide-react";
+import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp, Mic, FileText, Monitor, Play, Square } from "lucide-react";
 import { toast } from "sonner";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 // ─── SCRIPT MODELS ────────────────────────────────────────────────────────────
 const SCRIPT_MODELS = [
@@ -153,12 +155,108 @@ const videoFormSchema = z.object({
 
 type VideoFormValues = z.infer<typeof videoFormSchema>;
 
+// ─── VOICE ROW SUBCOMPONENT ───────────────────────────────────────────────────
+interface VoiceRowProps {
+  id: string;
+  name: string;
+  desc: string;
+  selected: boolean;
+  playing: boolean;
+  loading: boolean;
+  onSelect: () => void;
+  onPlay: (e: React.MouseEvent) => void;
+  noPreview?: boolean;
+}
+
+function VoiceRow({ name, desc, selected, playing, loading, onSelect, onPlay, noPreview }: VoiceRowProps) {
+  return (
+    <div
+      onClick={onSelect}
+      className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-all border-b border-border/10 last:border-0 ${
+        selected
+          ? "bg-primary/10 border-l-2 border-l-primary"
+          : "hover:bg-muted/30 border-l-2 border-l-transparent"
+      }`}
+    >
+      <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${selected ? "bg-primary" : "bg-muted-foreground/20"}`} />
+      <div className="flex-1 min-w-0">
+        <p className={`text-xs font-medium leading-tight truncate ${selected ? "text-primary" : "text-foreground"}`}>{name}</p>
+        <p className="text-[10px] text-muted-foreground/70 leading-tight truncate">{desc}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onPlay}
+        disabled={loading || noPreview}
+        title={noPreview ? "Preview não disponível para OpenAI" : playing ? "Parar" : "Ouvir amostra"}
+        className={`shrink-0 w-6 h-6 flex items-center justify-center rounded transition-all ${
+          noPreview
+            ? "opacity-20 cursor-not-allowed"
+            : playing
+            ? "text-primary bg-primary/20 hover:bg-primary/30"
+            : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+        }`}
+      >
+        {loading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : playing ? (
+          <Square className="w-3 h-3 fill-current" />
+        ) : (
+          <Play className="w-3 h-3 fill-current" />
+        )}
+      </button>
+    </div>
+  );
+}
+
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 export function VideoForm() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const createVideo = useCreateVideo();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlayVoice = async (voiceId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (playingVoice === voiceId) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setPlayingVoice(null);
+      return;
+    }
+
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlayingVoice(null);
+
+    const isGemini = voiceId.startsWith("gemini-tts:") || voiceId.startsWith("gemini-3.1-tts:");
+    const isEleven = voiceId.length > 18 && !voiceId.includes(":");
+    if (!isGemini && !isEleven) {
+      toast.info("Preview não disponível para vozes OpenAI.");
+      return;
+    }
+
+    setLoadingVoice(voiceId);
+    try {
+      const res = await fetch(`${BASE_URL}/api/voices/preview?voice=${encodeURIComponent(voiceId)}`);
+      if (!res.ok) throw new Error("Falha ao carregar preview");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setPlayingVoice(voiceId);
+      audio.onended = () => { setPlayingVoice(null); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setPlayingVoice(null); };
+      await audio.play();
+    } catch {
+      toast.error("Erro ao carregar preview de voz.");
+    } finally {
+      setLoadingVoice(null);
+    }
+  };
 
   const form = useForm<VideoFormValues>({
     resolver: zodResolver(videoFormSchema),
@@ -422,67 +520,86 @@ export function VideoForm() {
             Opções avançadas (idioma do roteiro)
           </button>
 
-          {/* Voice Selection */}
-          <div className="border border-border/40 rounded-lg p-4 space-y-3 bg-background/30">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold flex items-center gap-1">
-                <Mic className="w-3 h-3" /> Voz da Narração
-              </span>
-              <span className="text-xs text-yellow-500/80 font-mono">ElevenLabs + Gemini + OpenAI</span>
-            </div>
+          {/* Voice Selection — Custom Picker with Play Preview */}
+          <FormField
+            control={form.control}
+            name="voice"
+            render={({ field }) => (
+              <FormItem>
+                <div className="border border-border/40 rounded-lg bg-background/30 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30">
+                    <span className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold flex items-center gap-1">
+                      <Mic className="w-3 h-3" /> Voz da Narração
+                    </span>
+                    <span className="text-xs text-primary/70 font-mono">
+                      {ELEVENLABS_VOICES.find(v => v.id === field.value)?.name ??
+                       GEMINI_TTS_VOICES.find(v => v.id === field.value)?.name ??
+                       OPENAI_VOICES.find(v => v.id === field.value)?.name ??
+                       "Selecione uma voz"}
+                    </span>
+                  </div>
 
-            <FormField
-              control={form.control}
-              name="voice"
-              render={({ field }) => (
-                <FormItem>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                        <SelectValue placeholder="Selecione a voz" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-popover border-border max-h-80">
-                      <SelectGroup>
-                        <SelectLabel className="text-xs text-yellow-500/80 font-mono">⚡ ElevenLabs — Emocional</SelectLabel>
-                        {ELEVENLABS_VOICES.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{v.flag} {v.name}</span>
-                              <span className="text-xs text-muted-foreground">{v.desc}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel className="text-xs text-blue-400/80 font-mono">🔵 Google Gemini TTS</SelectLabel>
-                        {GEMINI_TTS_VOICES.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{v.name}</span>
-                              <span className="text-xs text-muted-foreground">{v.desc}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                      <SelectGroup>
-                        <SelectLabel className="text-xs text-blue-400/80 font-mono">OpenAI TTS</SelectLabel>
-                        {OPENAI_VOICES.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{v.name}</span>
-                              <span className="text-xs text-muted-foreground">{v.desc}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {/* ElevenLabs group */}
+                    <div className="px-3 py-1.5 text-[10px] font-mono text-yellow-500/70 uppercase tracking-wider bg-yellow-500/5 border-b border-border/20">
+                      ⚡ ElevenLabs — Alta Emoção
+                    </div>
+                    {ELEVENLABS_VOICES.map((v) => (
+                      <VoiceRow
+                        key={v.id}
+                        id={v.id}
+                        name={`${v.flag} ${v.name}`}
+                        desc={v.desc}
+                        selected={field.value === v.id}
+                        playing={playingVoice === v.id}
+                        loading={loadingVoice === v.id}
+                        onSelect={() => field.onChange(v.id)}
+                        onPlay={(e) => handlePlayVoice(v.id, e)}
+                      />
+                    ))}
+
+                    {/* Gemini group */}
+                    <div className="px-3 py-1.5 text-[10px] font-mono text-blue-400/70 uppercase tracking-wider bg-blue-400/5 border-y border-border/20">
+                      🔵 Google Gemini TTS
+                    </div>
+                    {GEMINI_TTS_VOICES.map((v) => (
+                      <VoiceRow
+                        key={v.id}
+                        id={v.id}
+                        name={v.name}
+                        desc={v.desc}
+                        selected={field.value === v.id}
+                        playing={playingVoice === v.id}
+                        loading={loadingVoice === v.id}
+                        onSelect={() => field.onChange(v.id)}
+                        onPlay={(e) => handlePlayVoice(v.id, e)}
+                      />
+                    ))}
+
+                    {/* OpenAI group */}
+                    <div className="px-3 py-1.5 text-[10px] font-mono text-muted-foreground/60 uppercase tracking-wider bg-muted/10 border-y border-border/20">
+                      OpenAI TTS
+                    </div>
+                    {OPENAI_VOICES.map((v) => (
+                      <VoiceRow
+                        key={v.id}
+                        id={v.id}
+                        name={v.name}
+                        desc={v.desc}
+                        selected={field.value === v.id}
+                        playing={playingVoice === v.id}
+                        loading={loadingVoice === v.id}
+                        onSelect={() => field.onChange(v.id)}
+                        onPlay={(e) => handlePlayVoice(v.id, e)}
+                        noPreview
+                      />
+                    ))}
+                  </div>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {showAdvanced && (
             <div className="pt-1">

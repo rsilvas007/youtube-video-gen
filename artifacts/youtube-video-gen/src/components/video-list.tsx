@@ -1,10 +1,15 @@
-import { useListVideos } from "@workspace/api-client-react";
+import { useState } from "react";
+import { useListVideos, getListVideosQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Play, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Play, Clock, CheckCircle2, AlertCircle, Loader2, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "AGUARDANDO",
@@ -19,11 +24,37 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function VideoList() {
+  const queryClient = useQueryClient();
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+
   const { data: videos, isLoading } = useListVideos({
     query: {
       refetchInterval: 3000,
     },
   });
+
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (confirmId !== id) {
+      setConfirmId(id);
+      return;
+    }
+
+    try {
+      setDeletingId(id);
+      setConfirmId(null);
+      await fetch(`${BASE_URL}/api/videos/${id}`, { method: "DELETE" });
+      await queryClient.invalidateQueries({ queryKey: getListVideosQueryKey() });
+      toast.success("Vídeo removido do histórico.");
+    } catch {
+      toast.error("Erro ao remover vídeo.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -67,20 +98,52 @@ export function VideoList() {
       {videos.map((video) => (
         <Link key={video.id} href={`/videos/${video.id}`}>
           <div className="block group cursor-pointer">
-            <Card className="p-4 bg-card/40 border-border/50 hover:bg-card/80 hover:border-primary/50 transition-all">
+            <Card className="p-4 bg-card/40 border-border/50 hover:bg-card/80 hover:border-primary/50 transition-all relative">
               <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">{video.topic}</h3>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground font-mono">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1 pr-2">{video.topic}</h3>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground font-mono flex-wrap">
                     <span>{format(new Date(video.createdAt), "dd/MM HH:mm", { locale: ptBR })}</span>
                     <span>•</span>
                     <span>{video.durationMinutes} MIN</span>
                     <span>•</span>
                     <span className="uppercase">{video.style}</span>
+                    {video.platform && (
+                      <>
+                        <span>•</span>
+                        <span className="uppercase">{video.platform}</span>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="shrink-0 ml-4">
+                <div className="flex items-center gap-2 shrink-0 ml-2">
                   {getStatusBadge(video.status)}
+
+                  {confirmId === video.id ? (
+                    <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+                      <button
+                        onClick={(e) => handleDelete(video.id, e)}
+                        disabled={deletingId === video.id}
+                        className="text-xs text-destructive border border-destructive/30 rounded px-1.5 py-0.5 hover:bg-destructive/10 transition-colors font-mono"
+                      >
+                        {deletingId === video.id ? "..." : "Excluir"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmId(null); }}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => handleDelete(video.id, e)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-destructive p-1 rounded"
+                      title="Remover do histórico"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </Card>
