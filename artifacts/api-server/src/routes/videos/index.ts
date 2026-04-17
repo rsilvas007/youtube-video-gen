@@ -151,7 +151,7 @@ router.post("/videos/:id/generate", async (req, res) => {
     sendEvent("images", "Gerando imagens cinematográficas com IA...", 37);
     await updateVideo(id, { status: "generating_images", progress: 37 });
 
-    const imagePaths = await generateImages(blocks, imagesDir);
+    const imagePaths = await generateImages(blocks, imagesDir, video.style);
     for (let i = 0; i < imagePaths.length; i++) {
       const pct = 37 + Math.round((i + 1) * (18 / imagePaths.length));
       sendEvent("images", `Imagem ${i + 1}/${imagePaths.length} gerada.`, pct);
