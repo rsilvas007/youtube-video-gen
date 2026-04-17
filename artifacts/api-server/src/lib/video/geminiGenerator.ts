@@ -396,6 +396,97 @@ export async function generateImagesWithGemini(
   return imagePaths;
 }
 
+// ─── CUSTOM SCRIPT PARSER ────────────────────────────────────────────────────
+// Accepts a free-form user script and uses Gemini to split it into 10 blocks
+// with appropriate image prompts for each block.
+export async function parseCustomScriptWithGemini(
+  customScript: string,
+  topic: string,
+  style: string,
+  language: string,
+  model: string = "gemini-2.5-flash"
+): Promise<ScriptBlock[]> {
+  const prompt = `You are an expert video producer and prompt engineer.
+
+The user has written their own narration script for a YouTube video about: "${topic}" (style: ${style}, language: ${language}).
+
+YOUR TASK: Split the script into exactly 10 narrative blocks and generate a cinematic image prompt for each block.
+
+RULES:
+1. Split the script naturally at paragraph or sentence boundaries — do NOT cut words mid-sentence
+2. Each block should be roughly equal length but can vary based on natural breaks
+3. If the script has fewer than 10 natural sections, split longer sections further
+4. If the script has more than 10 sections, merge shorter ones
+5. For each block's image prompt: write a cinematic, photorealistic description (60-80 words) with specific camera angle, lighting, color palette, and mood — end with "ultra-sharp 8K, photorealistic, no text"
+6. NEVER repeat the same camera angle in consecutive blocks
+
+OUTPUT FORMAT — return ONLY this, no extra text:
+===BLOCO 1===
+NARRAÇÃO: [block 1 text, copied exactly from the script]
+PROMPT: [cinematic image prompt for block 1]
+===FIM_BLOCO 1===
+
+===BLOCO 2===
+NARRAÇÃO: [block 2 text]
+PROMPT: [image prompt for block 2]
+===FIM_BLOCO 2===
+
+... (continue for all 10 blocks)
+
+THE USER'S SCRIPT:
+${customScript}`;
+
+  const resp = await geminiPost(`${model}:generateContent`, {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
+  }) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+
+  const content = resp?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  const blocks: ScriptBlock[] = [];
+  const re = /===BLOCO (\d+)===([\s\S]*?)===FIM_BLOCO \1===/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    const bn = parseInt(m[1], 10);
+    const bc = m[2];
+    const narMatch = bc.match(/NARRAÇÃO:\s*([\s\S]*?)(?:PROMPT:|$)/i);
+    const prmMatch = bc.match(/PROMPT:\s*([\s\S]*?)$/i);
+    const text = narMatch?.[1]?.trim() ?? "";
+    const imagePrompt = prmMatch?.[1]?.trim() ?? `Cinematic shot, dramatic lighting, ${style} mood, ultra-sharp 8K`;
+    const visual = VISUAL_SEQUENCE[(bn - 1) % 10];
+    if (text) {
+      blocks.push({
+        blockNumber: bn,
+        text,
+        imagePrompt,
+        cameraMovement: visual.camera,
+        visualType: visual.type,
+      });
+    }
+  }
+
+  // If parsing failed, do a simple word-count split
+  if (blocks.length < 3) {
+    const words = customScript.trim().split(/\s+/);
+    const chunkSize = Math.ceil(words.length / 10);
+    for (let i = 0; i < 10; i++) {
+      const chunk = words.slice(i * chunkSize, (i + 1) * chunkSize).join(" ");
+      if (chunk.trim()) {
+        const visual = VISUAL_SEQUENCE[i];
+        blocks.push({
+          blockNumber: i + 1,
+          text: chunk,
+          imagePrompt: `Cinematic ${visual.type} shot, ${style} atmosphere, dramatic lighting, ultra-sharp 8K, photorealistic, no text`,
+          cameraMovement: visual.camera,
+          visualType: visual.type,
+        });
+      }
+    }
+  }
+
+  return blocks;
+}
+
 // ─── IMAGE PROMPT ENHANCEMENT ────────────────────────────────────────────────
 // Uses Gemini to improve all 10 image prompts before sending to image generators.
 // Results in dramatically better cinematic imagery.

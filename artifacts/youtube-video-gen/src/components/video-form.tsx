@@ -15,6 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp, Mic, FileText, Monitor, Play, Square } from "lucide-react";
@@ -151,6 +152,7 @@ const videoFormSchema = z.object({
   scriptModel: z.string().default("gemini-2.5-flash"),
   imageModel: z.string().default("flux-realism"),
   videoModel: z.string().default("seedance"),
+  customScript: z.string().optional(),
 });
 
 type VideoFormValues = z.infer<typeof videoFormSchema>;
@@ -214,6 +216,7 @@ export function VideoForm() {
   const queryClient = useQueryClient();
   const createVideo = useCreateVideo();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [useCustomScript, setUseCustomScript] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -274,12 +277,16 @@ export function VideoForm() {
   });
 
   const onSubmit = (data: VideoFormValues) => {
+    const payload = {
+      ...data,
+      customScript: useCustomScript && data.customScript?.trim() ? data.customScript.trim() : undefined,
+    };
     createVideo.mutate(
-      { data },
+      { data: payload },
       {
         onSuccess: (video) => {
           queryClient.invalidateQueries({ queryKey: getListVideosQueryKey() });
-          toast.success("Vídeo criado com sucesso!");
+          toast.success(useCustomScript ? "Vídeo com roteiro próprio criado!" : "Vídeo criado com sucesso!");
           setLocation(`/videos/${video.id}`);
         },
         onError: () => {
@@ -404,41 +411,88 @@ export function VideoForm() {
               <span className="text-xs text-primary/70 font-mono">Gemini + Pollinations</span>
             </div>
 
-            {/* Script Model */}
-            <FormField
-              control={form.control}
-              name="scriptModel"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono flex items-center gap-1">
-                    <FileText className="w-3 h-3" /> Roteiro (LLM)
-                  </FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
-                        <SelectValue placeholder="Modelo de roteiro" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-popover border-border max-h-72">
-                      {SCRIPT_MODELS.map((g) => (
-                        <SelectGroup key={g.group}>
-                          <SelectLabel className="text-xs text-primary/70 font-mono">{g.group}</SelectLabel>
-                          {g.items.map((m) => (
-                            <SelectItem key={m.value} value={m.value}>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{m.label}</span>
-                                <span className="text-xs text-muted-foreground">{m.desc}</span>
-                              </div>
-                            </SelectItem>
+            {/* Script: Toggle between AI generation and custom */}
+            <div>
+              <div className="flex items-center gap-1 mb-2">
+                <FileText className="w-3 h-3 text-muted-foreground" />
+                <span className="text-xs uppercase tracking-wider text-muted-foreground font-mono font-semibold">Roteiro</span>
+                <div className="ml-auto flex items-center bg-muted/30 rounded-md p-0.5 border border-border/30">
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomScript(false)}
+                    className={`text-[10px] font-mono px-2 py-1 rounded transition-all ${!useCustomScript ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    GERAR COM IA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomScript(true)}
+                    className={`text-[10px] font-mono px-2 py-1 rounded transition-all ${useCustomScript ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    MEU ROTEIRO
+                  </button>
+                </div>
+              </div>
+
+              {useCustomScript ? (
+                <FormField
+                  control={form.control}
+                  name="customScript"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          placeholder="Cole seu roteiro aqui. O Gemini irá dividir automaticamente em 10 blocos e gerar prompts de imagem para cada trecho..."
+                          className="min-h-[180px] text-xs font-mono bg-background/50 border-border/50 focus-visible:ring-primary/50 resize-y leading-relaxed placeholder:text-muted-foreground/40"
+                        />
+                      </FormControl>
+                      <div className="flex items-center justify-between">
+                        <FormMessage />
+                        <span className="text-[10px] text-muted-foreground/50 font-mono ml-auto">
+                          {field.value?.trim().split(/\s+/).filter(Boolean).length ?? 0} palavras
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+                        ✨ O Gemini divide o roteiro em 10 blocos e cria prompts cinematográficos para cada imagem automaticamente.
+                      </p>
+                    </FormItem>
+                  )}
+                />
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="scriptModel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 border-border/50 focus:ring-primary/50 transition-all">
+                            <SelectValue placeholder="Modelo de roteiro" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-popover border-border max-h-72">
+                          {SCRIPT_MODELS.map((g) => (
+                            <SelectGroup key={g.group}>
+                              <SelectLabel className="text-xs text-primary/70 font-mono">{g.group}</SelectLabel>
+                              {g.items.map((m) => (
+                                <SelectItem key={m.value} value={m.value}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{m.label}</span>
+                                    <span className="text-xs text-muted-foreground">{m.desc}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
                           ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Image Model */}

@@ -19,6 +19,7 @@ import {
   generateImagesWithGemini,
   enhanceImagePromptsWithGemini,
   generateYouTubeMetadataWithGemini,
+  parseCustomScriptWithGemini,
 } from "../../lib/video/geminiGenerator.js";
 import {
   mergeAudios,
@@ -80,7 +81,7 @@ router.delete("/videos/:id", async (req, res) => {
 });
 
 router.post("/videos", async (req, res) => {
-  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel, platform } = req.body as {
+  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel, platform, customScript } = req.body as {
     topic: string;
     style: string;
     durationMinutes: number;
@@ -90,6 +91,7 @@ router.post("/videos", async (req, res) => {
     videoModel?: string;
     scriptModel?: string;
     platform?: string;
+    customScript?: string;
   };
 
   if (!topic || !style || !durationMinutes || !voice) {
@@ -109,6 +111,7 @@ router.post("/videos", async (req, res) => {
       scriptModel: scriptModel ?? "gemini-2.5-flash",
       imageModel: imageModel ?? "flux-realism",
       videoModel: videoModel ?? "seedance",
+      customScript: customScript?.trim() || null,
     })
     .returning();
 
@@ -168,20 +171,39 @@ router.post("/videos/:id/generate", async (req, res) => {
 
     // ─── STEP 1: SCRIPT ───────────────────────────────────────────────────────
     const scriptModel = video.scriptModel ?? "gemini-2.5-flash";
-    const useGeminiScript = USE_GEMINI && scriptModel.startsWith("gemini");
-    const scriptLabel = useGeminiScript ? `Google ${scriptModel}` : `OpenAI ${scriptModel}`;
-
-    sendEvent("script", `✍️ Gerando roteiro com ${scriptLabel}...`, 5);
-    await updateVideo(id, { status: "generating_script", progress: 5 });
+    const hasCustomScript = !!(video.customScript?.trim());
 
     let blocks;
-    if (useGeminiScript) {
-      blocks = await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel);
+
+    if (hasCustomScript) {
+      sendEvent("script", "📝 Processando roteiro personalizado com Gemini...", 5);
+      await updateVideo(id, { status: "generating_script", progress: 5 });
+      blocks = USE_GEMINI
+        ? await parseCustomScriptWithGemini(video.customScript!, video.topic, video.style, video.language, scriptModel)
+        : (() => {
+            // Fallback: simple split without Gemini
+            const words = video.customScript!.trim().split(/\s+/);
+            const size = Math.ceil(words.length / 10);
+            return Array.from({ length: 10 }, (_, i) => ({
+              blockNumber: i + 1,
+              text: words.slice(i * size, (i + 1) * size).join(" "),
+              imagePrompt: `Cinematic shot, dramatic lighting, ${video.style} mood, ultra-sharp 8K, photorealistic, no text`,
+              cameraMovement: "slow zoom" as const,
+              visualType: "wide" as const,
+            })).filter(b => b.text.trim());
+          })();
+      sendEvent("script", `✅ Roteiro dividido em ${blocks.length} blocos com prompts de imagem.`, 15);
     } else {
-      blocks = await generateScript(video.topic, video.style, video.durationMinutes, video.language);
+      const useGeminiScript = USE_GEMINI && scriptModel.startsWith("gemini");
+      const scriptLabel = useGeminiScript ? `Google ${scriptModel}` : `OpenAI ${scriptModel}`;
+      sendEvent("script", `✍️ Gerando roteiro com ${scriptLabel}...`, 5);
+      await updateVideo(id, { status: "generating_script", progress: 5 });
+      blocks = useGeminiScript
+        ? await generateScriptWithGemini(video.topic, video.style, video.durationMinutes, video.language, scriptModel)
+        : await generateScript(video.topic, video.style, video.durationMinutes, video.language);
+      sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
     }
 
-    sendEvent("script", `Roteiro gerado: ${blocks.length} blocos criados.`, 15);
     await updateVideo(id, { progress: 15 });
 
     // ─── METADATA (parallel, fire-and-forget with result) ─────────────────────
