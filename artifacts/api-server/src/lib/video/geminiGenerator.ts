@@ -380,38 +380,38 @@ export async function generateImagesWithGemini(
   imageModel: string = "gemini-2.5-flash-image"
 ): Promise<string[]> {
   fs.mkdirSync(imagesDir, { recursive: true });
-  const imagePaths: string[] = [];
+  const tech = style && /tech|tecnolog|network|data|digital/i.test(style)
+    ? "glowing neon accents, dark cinematic background, holographic elements,"
+    : "";
 
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    const suffix = STYLE_SUFFIXES[i % STYLE_SUFFIXES.length];
-    const tech = style && /tech|tecnolog|network|data|digital/i.test(style)
-      ? "glowing neon accents, dark cinematic background, holographic elements,"
-      : "";
+  // Generate all images in parallel (max 2 concurrent — Gemini image has strict rate limits)
+  await runConcurrent(
+    blocks.map((block, i) => async () => {
+      const suffix = STYLE_SUFFIXES[i % STYLE_SUFFIXES.length];
+      const prompt = [block.imagePrompt, tech, `Camera: ${block.cameraMovement}.`, suffix, "NO text, NO watermark, NO logo"]
+        .filter(Boolean).join(" ");
+      const outputPath = path.join(imagesDir, `img_${String(block.blockNumber).padStart(2, "0")}.png`);
 
-    const prompt = [block.imagePrompt, tech, `Camera: ${block.cameraMovement}.`, suffix, "NO text, NO watermark, NO logo"]
-      .filter(Boolean).join(" ");
+      const resp = await geminiPostWithRetry(`${imageModel}:generateContent`, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+      }) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
+        }>
+      };
 
-    const outputPath = path.join(imagesDir, `img_${String(block.blockNumber).padStart(2, "0")}.png`);
+      const parts = resp?.candidates?.[0]?.content?.parts ?? [];
+      const imgPart = parts.find((p) => p.inlineData?.mimeType?.startsWith("image/"));
+      if (!imgPart?.inlineData?.data) throw new Error(`No image data for block ${block.blockNumber}`);
+      fs.writeFileSync(outputPath, Buffer.from(imgPart.inlineData.data, "base64"));
+    }),
+    2
+  );
 
-    const resp = await geminiPostWithRetry(`${imageModel}:generateContent`, {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
-    }) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
-      }>
-    };
-
-    const parts = resp?.candidates?.[0]?.content?.parts ?? [];
-    const imgPart = parts.find((p) => p.inlineData?.mimeType?.startsWith("image/"));
-    if (!imgPart?.inlineData?.data) throw new Error(`No image data for block ${block.blockNumber}`);
-
-    fs.writeFileSync(outputPath, Buffer.from(imgPart.inlineData.data, "base64"));
-    imagePaths.push(outputPath);
-  }
-
-  return imagePaths;
+  return blocks.map((b) =>
+    path.join(imagesDir, `img_${String(b.blockNumber).padStart(2, "0")}.png`)
+  );
 }
 
 // ─── CUSTOM SCRIPT PARSER ────────────────────────────────────────────────────

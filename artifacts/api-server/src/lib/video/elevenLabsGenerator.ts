@@ -113,56 +113,51 @@ export async function generateAudioWithElevenLabs(
 ): Promise<string[]> {
   fs.mkdirSync(audioDir, { recursive: true });
 
-  const audioPaths: string[] = [];
+  // Generate all blocks in parallel — ElevenLabs handles concurrent requests well
+  await Promise.all(
+    blocks.map(async (block) => {
+      const outputPath = path.join(
+        audioDir,
+        `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`
+      );
+      const settings = BLOCK_VOICE_SETTINGS[block.blockNumber] ?? DEFAULT_VOICE_SETTINGS;
+      const requestBody = {
+        text: block.text,
+        model_id: MODEL_ID,
+        voice_settings: {
+          stability: settings.stability,
+          similarity_boost: settings.similarity_boost,
+          style: settings.style,
+          use_speaker_boost: settings.use_speaker_boost,
+          speed: settings.speed,
+        },
+      };
 
-  for (const block of blocks) {
-    const outputPath = path.join(
-      audioDir,
-      `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`
-    );
-
-    const settings = BLOCK_VOICE_SETTINGS[block.blockNumber] ?? DEFAULT_VOICE_SETTINGS;
-
-    const requestBody = {
-      text: block.text,
-      model_id: MODEL_ID,
-      voice_settings: {
-        stability: settings.stability,
-        similarity_boost: settings.similarity_boost,
-        style: settings.style,
-        use_speaker_boost: settings.use_speaker_boost,
-        speed: settings.speed,
-      },
-    };
-
-    let attempts = 0;
-    let lastError: Error | null = null;
-
-    while (attempts < 3) {
-      try {
-        await postToFile(
-          `/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-          requestBody,
-          outputPath
-        );
-        const stat = fs.statSync(outputPath);
-        if (stat.size < 1000) {
-          throw new Error(`Audio too small (${stat.size} bytes)`);
-        }
-        lastError = null;
-        break;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        attempts++;
-        if (attempts < 3) {
-          await new Promise((r) => setTimeout(r, 3000 * attempts));
+      let attempts = 0;
+      let lastError: Error | null = null;
+      while (attempts < 3) {
+        try {
+          await postToFile(
+            `/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+            requestBody,
+            outputPath
+          );
+          const stat = fs.statSync(outputPath);
+          if (stat.size < 1000) throw new Error(`Audio too small (${stat.size} bytes)`);
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          attempts++;
+          if (attempts < 3) await new Promise((r) => setTimeout(r, 2000 * attempts));
         }
       }
-    }
+      if (lastError) throw lastError;
+    })
+  );
 
-    if (lastError) throw lastError;
-    audioPaths.push(outputPath);
-  }
-
-  return audioPaths;
+  // Return paths in block order
+  return blocks.map((b) =>
+    path.join(audioDir, `audio_${String(b.blockNumber).padStart(2, "0")}.mp3`)
+  );
 }
