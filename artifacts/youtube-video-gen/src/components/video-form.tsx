@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -233,6 +233,51 @@ export function VideoForm() {
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ElevenLabs voice browser
+  interface ELVoice {
+    voice_id: string;
+    name: string;
+    category: string;
+    preview_url?: string;
+    labels?: { gender?: string; accent?: string; description?: string; language?: string; use_case?: string };
+  }
+  const [showElBrowser, setShowElBrowser] = useState(false);
+  const [elVoices, setElVoices] = useState<ELVoice[]>([]);
+  const [elLoading, setElLoading] = useState(false);
+  const [elError, setElError] = useState<string | null>(null);
+  const [elSearch, setElSearch] = useState("");
+
+  const fetchElVoices = useCallback(async () => {
+    if (elVoices.length > 0) return; // already loaded
+    setElLoading(true);
+    setElError(null);
+    try {
+      const res = await fetch(`${BASE_URL}/api/voices/elevenlabs`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json() as { voices: ELVoice[] };
+      // Sort: premade first, then by name
+      const sorted = (json.voices ?? []).sort((a, b) => {
+        if (a.category === "premade" && b.category !== "premade") return -1;
+        if (a.category !== "premade" && b.category === "premade") return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setElVoices(sorted);
+    } catch (err) {
+      setElError(err instanceof Error ? err.message : "Erro ao carregar vozes");
+    } finally {
+      setElLoading(false);
+    }
+  }, [elVoices.length]);
+
+  const handleToggleElBrowser = useCallback(() => {
+    const next = !showElBrowser;
+    setShowElBrowser(next);
+    if (next) fetchElVoices();
+  }, [showElBrowser, fetchElVoices]);
 
   const handlePlayVoice = async (voiceId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -603,6 +648,7 @@ export function VideoForm() {
                       {ELEVENLABS_VOICES.find(v => v.id === field.value)?.name ??
                        GEMINI_TTS_VOICES.find(v => v.id === field.value)?.name ??
                        OPENAI_VOICES.find(v => v.id === field.value)?.name ??
+                       elVoices.find(v => v.voice_id === field.value)?.name ??
                        "Selecione uma voz"}
                     </span>
                   </div>
@@ -625,6 +671,123 @@ export function VideoForm() {
                         onPlay={(e) => handlePlayVoice(v.id, e)}
                       />
                     ))}
+                    {/* Browser toggle */}
+                    <button
+                      type="button"
+                      onClick={handleToggleElBrowser}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] font-mono text-yellow-400/60 hover:text-yellow-400 hover:bg-yellow-500/5 transition-all border-b border-border/20"
+                    >
+                      {showElBrowser ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      {showElBrowser ? "Fechar catálogo ElevenLabs" : "🔍 Ver TODAS as vozes ElevenLabs"}
+                    </button>
+
+                    {/* ElevenLabs full catalogue browser */}
+                    {showElBrowser && (
+                      <div className="border-b border-border/20 bg-yellow-500/5">
+                        {/* Search input */}
+                        <div className="px-3 py-2 border-b border-border/10">
+                          <input
+                            type="text"
+                            value={elSearch}
+                            onChange={(e) => setElSearch(e.target.value)}
+                            placeholder="🔍 Buscar por nome, idioma, gênero, estilo..."
+                            className="w-full text-xs bg-background/60 border border-border/40 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-yellow-500/40 font-mono"
+                          />
+                        </div>
+
+                        {/* Voice list */}
+                        <div className="max-h-64 overflow-y-auto">
+                          {elLoading && (
+                            <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground font-mono">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Carregando catálogo ElevenLabs...
+                            </div>
+                          )}
+                          {elError && (
+                            <div className="px-3 py-3 text-xs text-red-400 font-mono">{elError}</div>
+                          )}
+                          {!elLoading && !elError && elVoices.length === 0 && (
+                            <div className="px-3 py-3 text-xs text-muted-foreground font-mono">Nenhuma voz encontrada.</div>
+                          )}
+                          {!elLoading && elVoices.filter(v => {
+                            if (!elSearch.trim()) return true;
+                            const q = elSearch.toLowerCase();
+                            const labels = v.labels ?? {};
+                            return (
+                              v.name.toLowerCase().includes(q) ||
+                              (labels.gender ?? "").toLowerCase().includes(q) ||
+                              (labels.accent ?? "").toLowerCase().includes(q) ||
+                              (labels.description ?? "").toLowerCase().includes(q) ||
+                              (labels.language ?? "").toLowerCase().includes(q) ||
+                              (labels.use_case ?? "").toLowerCase().includes(q) ||
+                              v.category.toLowerCase().includes(q)
+                            );
+                          }).map((v) => {
+                            const labels = v.labels ?? {};
+                            const genderIcon = labels.gender === "female" ? "♀" : labels.gender === "male" ? "♂" : "○";
+                            const isSelected = field.value === v.voice_id;
+                            return (
+                              <div
+                                key={v.voice_id}
+                                onClick={() => field.onChange(v.voice_id)}
+                                className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-all border-b border-border/10 last:border-0 ${
+                                  isSelected
+                                    ? "bg-yellow-500/10 border-l-2 border-l-yellow-400"
+                                    : "hover:bg-muted/30 border-l-2 border-l-transparent"
+                                }`}
+                              >
+                                <div className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? "bg-yellow-400" : "bg-muted-foreground/20"}`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-medium text-foreground truncate">{genderIcon} {v.name}</span>
+                                    {v.category !== "premade" && (
+                                      <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1 py-0.5 rounded font-mono">{v.category}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {labels.language && <span className="text-[9px] bg-blue-500/10 text-blue-300/70 px-1 rounded font-mono">{labels.language}</span>}
+                                    {labels.accent && <span className="text-[9px] text-muted-foreground/50 font-mono">{labels.accent}</span>}
+                                    {labels.description && <span className="text-[9px] text-muted-foreground/40 font-mono">{labels.description}</span>}
+                                    {labels.use_case && <span className="text-[9px] bg-green-500/10 text-green-300/60 px-1 rounded font-mono">{labels.use_case}</span>}
+                                  </div>
+                                </div>
+                                {/* Play from preview_url */}
+                                {v.preview_url && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (playingVoice === v.voice_id) {
+                                        audioRef.current?.pause();
+                                        audioRef.current = null;
+                                        setPlayingVoice(null);
+                                      } else {
+                                        audioRef.current?.pause();
+                                        audioRef.current = null;
+                                        setPlayingVoice(null);
+                                        const audio = new Audio(v.preview_url);
+                                        audioRef.current = audio;
+                                        setPlayingVoice(v.voice_id);
+                                        audio.onended = () => setPlayingVoice(null);
+                                        audio.onerror = () => setPlayingVoice(null);
+                                        audio.play().catch(() => setPlayingVoice(null));
+                                      }
+                                    }}
+                                    className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                      playingVoice === v.voice_id
+                                        ? "bg-yellow-400/20 text-yellow-400"
+                                        : "bg-muted/30 text-muted-foreground hover:bg-yellow-400/10 hover:text-yellow-400"
+                                    }`}
+                                  >
+                                    {playingVoice === v.voice_id ? <Square className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Gemini group */}
                     <div className="px-3 py-1.5 text-[10px] font-mono text-blue-400/70 uppercase tracking-wider bg-blue-400/5 border-y border-border/20">

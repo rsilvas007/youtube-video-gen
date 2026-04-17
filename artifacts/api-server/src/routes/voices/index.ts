@@ -135,6 +135,56 @@ async function elevenLabsPreview(voiceId: string): Promise<Buffer> {
   });
 }
 
+// ─── ELEVENLABS VOICE LIST ────────────────────────────────────────────────────
+async function fetchElevenLabsVoices(): Promise<unknown[]> {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.elevenlabs.io",
+      path: "/v1/voices",
+      method: "GET",
+      headers: {
+        "xi-api-key": ELEVENLABS_KEY,
+        "Accept": "application/json",
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (d: Buffer) => chunks.push(d));
+      res.on("end", () => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`ElevenLabs ${res.statusCode}: ${Buffer.concat(chunks).toString().slice(0, 200)}`));
+          return;
+        }
+        try {
+          const json = JSON.parse(Buffer.concat(chunks).toString());
+          resolve((json.voices ?? []) as unknown[]);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+// GET /api/voices/elevenlabs — full voice catalogue from ElevenLabs API
+router.get("/voices/elevenlabs", async (req, res) => {
+  if (!ELEVENLABS_KEY) {
+    res.status(503).json({ error: "ELEVENLABS_API_KEY não configurada" });
+    return;
+  }
+  try {
+    const voices = await fetchElevenLabsVoices();
+    res.json({ voices });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
+});
+
 // ─── ROUTE ───────────────────────────────────────────────────────────────────
 router.get("/voices/preview", async (req, res) => {
   const voice = String(req.query.voice ?? "").trim();
