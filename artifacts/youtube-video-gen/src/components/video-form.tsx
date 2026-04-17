@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp, Mic, FileText } from "lucide-react";
+import { Loader2, Plus, Zap, Image, Film, ChevronDown, ChevronUp, Mic, FileText, Monitor } from "lucide-react";
 import { toast } from "sonner";
 
 // ─── SCRIPT MODELS ────────────────────────────────────────────────────────────
@@ -118,6 +118,16 @@ const OPENAI_VOICES = [
   { id: "verse",   name: "Verse",   desc: "Expressivo" },
 ];
 
+// ─── PLATFORMS ────────────────────────────────────────────────────────────────
+const PLATFORMS = [
+  { value: "youtube",            label: "YouTube",               ratio: "16:9", res: "1920×1080",  icon: "▶" },
+  { value: "reels",              label: "Instagram Reels",        ratio: "9:16", res: "1080×1920",  icon: "📸" },
+  { value: "tiktok",             label: "TikTok",                ratio: "9:16", res: "1080×1920",  icon: "🎵" },
+  { value: "shorts",             label: "YouTube Shorts",         ratio: "9:16", res: "1080×1920",  icon: "⚡" },
+  { value: "instagram-square",   label: "Instagram Quadrado",     ratio: "1:1",  res: "1080×1080",  icon: "⬛" },
+  { value: "instagram-vertical", label: "Instagram Vertical",     ratio: "4:5",  res: "1080×1350",  icon: "📱" },
+];
+
 // ─── SCHEMA ───────────────────────────────────────────────────────────────────
 const videoFormSchema = z.object({
   topic: z.string().min(3, "O tema é obrigatório").max(200),
@@ -125,6 +135,7 @@ const videoFormSchema = z.object({
   durationMinutes: z.coerce.number().min(8).max(15),
   voice: z.string().min(1, "Selecione uma voz"),
   language: z.string().default("pt-BR"),
+  platform: z.string().default("youtube"),
   scriptModel: z.string().default("gemini-2.5-flash"),
   imageModel: z.string().default("flux-realism"),
   videoModel: z.string().default("seedance"),
@@ -147,6 +158,7 @@ export function VideoForm() {
       durationMinutes: 10,
       voice: "7u8qsX4HQsSHJ0f8xsQZ",
       language: "pt-BR",
+      platform: "youtube",
       scriptModel: "gemini-2.5-flash",
       imageModel: "flux-realism",
       videoModel: "seedance",
@@ -195,6 +207,42 @@ export function VideoForm() {
                 <FormControl>
                   <Input placeholder="Ex: O Mistério das Pirâmides do Egito" className="font-medium bg-background/50 border-border/50 focus-visible:ring-primary/50 transition-all" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Platform Selection */}
+          <FormField
+            control={form.control}
+            name="platform"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground font-mono flex items-center gap-1">
+                  <Monitor className="w-3 h-3" /> Plataforma de Destino
+                </FormLabel>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  {PLATFORMS.map((p) => {
+                    const isSelected = field.value === p.value;
+                    return (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => field.onChange(p.value)}
+                        className={`flex flex-col items-center gap-1 rounded-lg border p-2 text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border/40 bg-background/30 text-muted-foreground hover:border-border hover:text-foreground"
+                        }`}
+                      >
+                        <span className="text-xl leading-none">{p.icon}</span>
+                        <span className="text-[10px] font-medium leading-tight">{p.label}</span>
+                        <span className={`text-[9px] font-mono px-1 rounded ${isSelected ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>{p.ratio}</span>
+                        <span className="text-[8px] text-muted-foreground font-mono">{p.res}</span>
+                      </button>
+                    );
+                  })}
+                </div>
                 <FormMessage />
               </FormItem>
             )}

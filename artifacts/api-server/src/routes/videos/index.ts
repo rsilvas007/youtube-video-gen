@@ -57,7 +57,7 @@ router.get("/videos", async (req, res) => {
 });
 
 router.post("/videos", async (req, res) => {
-  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel } = req.body as {
+  const { topic, style, durationMinutes, voice, language, imageModel, videoModel, scriptModel, platform } = req.body as {
     topic: string;
     style: string;
     durationMinutes: number;
@@ -66,6 +66,7 @@ router.post("/videos", async (req, res) => {
     imageModel?: string;
     videoModel?: string;
     scriptModel?: string;
+    platform?: string;
   };
 
   if (!topic || !style || !durationMinutes || !voice) {
@@ -81,9 +82,10 @@ router.post("/videos", async (req, res) => {
       durationMinutes,
       voice,
       language: language ?? "pt-BR",
+      platform: platform ?? "youtube",
+      scriptModel: scriptModel ?? "gemini-2.5-flash",
       imageModel: imageModel ?? "flux-realism",
       videoModel: videoModel ?? "seedance",
-      scriptModel: scriptModel ?? "gemini-2.5-flash",
     })
     .returning();
 
@@ -243,21 +245,23 @@ router.post("/videos/:id/generate", async (req, res) => {
       sendEvent("video", "Montando vídeo final...", 87);
       await updateVideo(id, { status: "assembling_video", progress: 87 });
 
+      const vPlatform = video.platform ?? "youtube";
       if (successClips.length === blocks.length) {
-        await assembleFromClips(successClips, fullAudioPath, outputVideoPath);
+        await assembleFromClips(successClips, fullAudioPath, outputVideoPath, vPlatform);
       } else if (successClips.length > 0) {
         const resolvedPaths = rawClipPaths.map((p, i) =>
           p.startsWith("__FAILED__:") ? imagePaths[i] : p
         );
-        await assembleFromClips(resolvedPaths, fullAudioPath, outputVideoPath);
+        await assembleFromClips(resolvedPaths, fullAudioPath, outputVideoPath, vPlatform);
       } else {
         sendEvent("video", "⚠️ Usando animação dinâmica de imagens...", 87);
-        await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
+        await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath, vPlatform);
       }
     } else {
+      const vPlatform = video.platform ?? "youtube";
       sendEvent("video", "Montando vídeo com animações sincronizadas ao áudio...", 60);
       await updateVideo(id, { status: "assembling_video", progress: 60 });
-      await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath);
+      await assembleVideo(imagePaths, audioPaths, fullAudioPath, outputVideoPath, vPlatform);
     }
 
     sendEvent("video", "Vídeo montado com sucesso!", 95);

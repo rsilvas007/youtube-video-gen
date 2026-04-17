@@ -1,7 +1,52 @@
 import https from "https";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import type { ScriptBlock } from "./scriptGenerator.js";
+
+function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("ffmpeg", [
+      "-y", "-i", inputPath,
+      "-ar", "44100", "-ac", "1",
+      "-b:a", "192k",
+      outputPath,
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+    proc.on("close", (code) => {
+      if (code !== 0) reject(new Error(`ffmpeg convert error: ${stderr.slice(-300)}`));
+      else resolve();
+    });
+    proc.on("error", (e) => reject(e));
+  });
+}
+
+// For raw PCM data (no WAV header) from Gemini TTS
+// mimeType format: "audio/L16;codec=pcm;rate=24000" or similar
+function convertToMp3WithPcm(rawPath: string, outputPath: string, mimeType: string): Promise<void> {
+  const rateMatch = mimeType.match(/rate=(\d+)/);
+  const sampleRate = rateMatch ? rateMatch[1] : "24000";
+  return new Promise((resolve, reject) => {
+    const proc = spawn("ffmpeg", [
+      "-y",
+      "-f", "s16le",        // signed 16-bit little-endian PCM
+      "-ar", sampleRate,
+      "-ac", "1",
+      "-i", rawPath,
+      "-ar", "44100",
+      "-b:a", "192k",
+      outputPath,
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+    proc.on("close", (code) => {
+      if (code !== 0) reject(new Error(`ffmpeg PCM convert error: ${stderr.slice(-300)}`));
+      else resolve();
+    });
+    proc.on("error", (e) => reject(e));
+  });
+}
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
 const BASE = "generativelanguage.googleapis.com";
@@ -208,7 +253,8 @@ export async function generateAudioWithGemini(
   const audioPaths: string[] = [];
 
   for (const block of blocks) {
-    const outputPath = path.join(audioDir, `audio_${String(block.blockNumber).padStart(2, "0")}.wav`);
+    const rawPath = path.join(audioDir, `audio_raw_${String(block.blockNumber).padStart(2, "0")}.wav`);
+    const mp3Path = path.join(audioDir, `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`);
     const emotionHint = BLOCK_EMOTION_PROMPT[block.blockNumber] ?? "";
 
     const textWithHint = emotionHint
@@ -234,13 +280,24 @@ export async function generateAudioWithGemini(
           }>
         };
 
-        const audioData = resp?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (!audioData) throw new Error(`No audio data returned for block ${block.blockNumber}`);
+        const audioPart = resp?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (!audioPart?.data) throw new Error(`No audio data returned for block ${block.blockNumber}`);
 
-        fs.writeFileSync(outputPath, Buffer.from(audioData, "base64"));
-        const stat = fs.statSync(outputPath);
-        if (stat.size < 1000) throw new Error(`Audio too small (${stat.size} bytes)`);
+        // Write raw audio (WAV or PCM) then convert to MP3 for pipeline compatibility
+        fs.writeFileSync(rawPath, Buffer.from(audioPart.data, "base64"));
+        const stat = fs.statSync(rawPath);
+        if (stat.size < 500) throw new Error(`Raw audio too small (${stat.size} bytes)`);
 
+        // Handle raw PCM (no WAV header) vs proper WAV
+        const mimeType = audioPart.mimeType ?? "";
+        if (mimeType.includes("pcm") && !mimeType.includes("wav")) {
+          // Raw PCM — need to wrap with WAV header via ffmpeg pipe
+          await convertToMp3WithPcm(rawPath, mp3Path, mimeType);
+        } else {
+          await convertToMp3(rawPath, mp3Path);
+        }
+
+        try { fs.unlinkSync(rawPath); } catch { }
         lastError = null;
         break;
       } catch (err) {
@@ -251,7 +308,7 @@ export async function generateAudioWithGemini(
     }
 
     if (lastError) throw lastError;
-    audioPaths.push(outputPath);
+    audioPaths.push(mp3Path);
   }
 
   return audioPaths;

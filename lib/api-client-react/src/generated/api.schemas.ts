@@ -20,10 +20,18 @@ export interface CreateVideoBody {
    * @maximum 30
    */
   durationMinutes: number;
-  /** Voice style (alloy, echo, fable, onyx, nova, shimmer) */
+  /** Voice style (alloy, echo, fable, onyx, nova, shimmer or ElevenLabs UUID) */
   voice: string;
   /** Language for narration (default pt-BR) */
   language?: string;
+  /** Target platform: youtube | reels | shorts | tiktok | instagram-square | instagram-vertical */
+  platform?: string;
+  /** LLM model for script generation (e.g. gemini-2.5-flash, gpt-4o) */
+  scriptModel?: string;
+  /** Image generation model (e.g. flux-realism, gemini-2.5-flash-image) */
+  imageModel?: string;
+  /** Video generation model (e.g. seedance, ken-burns) */
+  videoModel?: string;
 }
 
 export interface Video {
@@ -33,6 +41,10 @@ export interface Video {
   durationMinutes: number;
   voice: string;
   language?: string;
+  platform?: string;
+  scriptModel?: string;
+  imageModel?: string;
+  videoModel?: string;
   /** pending | generating_script | generating_audio | generating_images | assembling_video | done | error */
   status: string;
   /** Progress percentage 0-100 */

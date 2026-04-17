@@ -2,7 +2,7 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. YouTube Video Generator — a full-stack app that automates generating long YouTube videos (8+ minutes) using AI.
+pnpm workspace monorepo using TypeScript. YouTube Video Generator — a full-stack app that automates generating long YouTube videos (8+ minutes) using AI for multiple social media platforms.
 
 ## Stack
 
@@ -15,22 +15,23 @@ pnpm workspace monorepo using TypeScript. YouTube Video Generator — a full-sta
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
-- **AI**: OpenAI via Replit AI Integrations (script generation, TTS audio, image generation)
-- **Video**: FFmpeg for audio merging and video assembly with Ken Burns effect
+- **AI Providers**: OpenAI (TTS, images), ElevenLabs (TTS), Google Gemini (script, TTS, images), Pollinations.ai (images, video clips)
+- **Video**: FFmpeg for audio merging and platform-adaptive video assembly (Ken Burns / zoompan effects)
 
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `cd lib/db && pnpm run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 ## Architecture
 
 ### Frontend (artifacts/youtube-video-gen)
-- React + Vite, dark mode cinematic UI
-- Form: topic, style, duration, voice, language
+- React + Vite, dark mode cinematic UI in Portuguese (pt-BR)
+- Form fields: topic, style, duration, platform, scriptModel, imageModel, videoModel, voice, language
+- **Platform selector**: Visual grid — YouTube 16:9, Reels/TikTok/Shorts 9:16, Instagram Square 1:1, Instagram Vertical 4:5
 - Home page shows all past video jobs
 - Video detail page shows real-time SSE progress log and download link
 
@@ -42,17 +43,41 @@ pnpm workspace monorepo using TypeScript. YouTube Video Generator — a full-sta
 - `GET /api/videos/:id/download` — download the final MP4
 
 ### Video Pipeline (artifacts/api-server/src/lib/video/)
-1. **scriptGenerator.ts** — Uses gpt-5.2 to generate a 10-block narration script with image prompts
-2. **audioGenerator.ts** — Converts each block to MP3 using OpenAI TTS (tts-1)
-3. **imageGenerator.ts** — Generates 10 cinematic images using gpt-image-1
-4. **videoAssembler.ts** — Merges audio with FFmpeg, assembles video with Ken Burns zoom effect
+1. **scriptGenerator.ts** — OpenAI GPT script generation (DarkAgent 10-block methodology)
+2. **geminiGenerator.ts** — Google Gemini: script generation (2.5 Flash/Pro, 3.x), TTS (2.5-flash-preview-tts), image generation (NanoBanana, NanoBanana Pro, NanoBanana 2)
+3. **audioGenerator.ts** — OpenAI TTS (gpt-4o-mini-tts) with emotion per-block
+4. **elevenLabsGenerator.ts** — ElevenLabs TTS with voice_settings (stability/similarity_boost/style/speed) per block
+5. **imageGenerator.ts** — OpenAI image generation fallback
+6. **pollinationsGenerator.ts** — Pollinations.ai: 20+ image models, 9 video clip models
+7. **videoAssembler.ts** — Platform-adaptive dimensions (1920×1080 / 1080×1920 / 1080×1080 / 1080×1350), 10 zoompan variants, ffprobe-synced audio durations
+
+### Platform Support (2026 specs)
+| Platform | Ratio | Resolution | FPS |
+|---|---|---|---|
+| YouTube | 16:9 | 1920×1080 | 30 |
+| Reels / TikTok / Shorts | 9:16 | 1080×1920 | 30 |
+| Instagram Square | 1:1 | 1080×1080 | 30 |
+| Instagram Vertical | 4:5 | 1080×1350 | 30 |
+
+### AI Model Selection
+- **Script**: Gemini 2.5 Flash (default), Gemini 2.5 Pro, Gemini 3 Flash/Pro Preview, Gemini 3.1 Pro Preview, GPT-4o, GPT-4o Mini
+- **Image**: Gemini NanoBanana/NanoBanana2/NanoBanana Pro (native API), Flux variants, GPT Image, Grok, Seedream, Wan, etc.
+- **Video Clips**: Seedance, Wan, Veo, Grok Video Pro, LTX-2, p-video, Nova Reel, Ken Burns (local)
+- **Voices**: ElevenLabs (9 voices, emotional per-block settings), Google Gemini TTS (8 voices), OpenAI TTS (10 voices)
 
 ### Database
-- `videos` table: id, topic, style, durationMinutes, voice, language, status, progress, errorMessage, outputPath
+- Table: `videos` with columns: id, topic, style, durationMinutes, voice, language, platform, scriptModel, imageModel, videoModel, status, progress, errorMessage, outputPath, createdAt, updatedAt
 
-## Environment Variables Required
-- `AI_INTEGRATIONS_OPENAI_BASE_URL` — auto-set by Replit AI Integrations
-- `AI_INTEGRATIONS_OPENAI_API_KEY` — auto-set by Replit AI Integrations
-- `DATABASE_URL` — auto-set by Replit DB
+### API Client (lib/api-client-react)
+- `CreateVideoBody` — includes platform, scriptModel, imageModel, videoModel
+- `Video` — all fields including new model/platform columns
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+### Critical Details
+- ElevenLabs voice IDs are long UUIDs (detect with `voice.length > 20`)
+- Gemini TTS voices use prefix `gemini-tts:VoiceName`
+- Gemini TTS returns WAV or raw PCM → auto-converted to MP3 via ffmpeg
+- Each image duration = ffprobe(audioPaths[i]) — exact sync, no fixed secondsPerImage
+- DB push command: `cd lib/db && pnpm run push`
+- FFmpeg: zoompan `s=` uses WxH; scale uses W:H; always `-preset ultrafast`
+- Gemini API key auto-detected; USE_GEMINI flag set if GEMINI_API_KEY present
+- Pollinations API key auto-detected for USE_POLLINATIONS flag
