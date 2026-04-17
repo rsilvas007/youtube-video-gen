@@ -279,6 +279,23 @@ function parseGeminiScript(content: string, n: number = 10): ScriptBlock[] {
 //   gemini-tts:VoiceName   → gemini-2.5-flash-preview-tts
 //   gemini-3.1-tts:VoiceName → gemini-3.1-flash-tts-preview
 
+// Run tasks with a max concurrency limit
+async function runConcurrent<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
+}
+
 export async function generateAudioWithGemini(
   blocks: ScriptBlock[],
   audioDir: string,
@@ -296,68 +313,50 @@ export async function generateAudioWithGemini(
     voiceName = voiceEntry.replace("gemini-tts:", "");
     ttsModel = "gemini-2.5-flash-preview-tts";
   }
-  const audioPaths: string[] = [];
 
-  for (const block of blocks) {
+  // Generate all audio blocks in parallel (max 2 concurrent to respect rate limits)
+  const tasks = blocks.map((block) => async (): Promise<string> => {
     const rawPath = path.join(audioDir, `audio_raw_${String(block.blockNumber).padStart(2, "0")}.wav`);
     const mp3Path = path.join(audioDir, `audio_${String(block.blockNumber).padStart(2, "0")}.mp3`);
     const emotionHint = BLOCK_EMOTION_PROMPT[block.blockNumber] ?? "";
-
     const textWithHint = emotionHint
       ? `[Narration style: ${emotionHint}]\n\n${block.text}`
       : block.text;
 
-    let attempts = 0;
-    let lastError: Error | null = null;
+    const resp = await geminiPostWithRetry(`${ttsModel}:generateContent`, {
+      contents: [{ parts: [{ text: textWithHint }] }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+      },
+    }) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
+      }>
+    };
 
-    while (attempts < 3) {
-      try {
-        const resp = await geminiPostWithRetry(`${ttsModel}:generateContent`, {
-          contents: [{ parts: [{ text: textWithHint }] }],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName } },
-            },
-          },
-        }) as {
-          candidates?: Array<{
-            content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> }
-          }>
-        };
+    const audioPart = resp?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+    if (!audioPart?.data) throw new Error(`No audio data for block ${block.blockNumber}`);
 
-        const audioPart = resp?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-        if (!audioPart?.data) throw new Error(`No audio data returned for block ${block.blockNumber}`);
+    fs.writeFileSync(rawPath, Buffer.from(audioPart.data, "base64"));
+    const stat = fs.statSync(rawPath);
+    if (stat.size < 500) throw new Error(`Raw audio too small (${stat.size} bytes)`);
 
-        // Write raw audio (WAV or PCM) then convert to MP3 for pipeline compatibility
-        fs.writeFileSync(rawPath, Buffer.from(audioPart.data, "base64"));
-        const stat = fs.statSync(rawPath);
-        if (stat.size < 500) throw new Error(`Raw audio too small (${stat.size} bytes)`);
-
-        // Handle raw PCM (no WAV header) vs proper WAV
-        const mimeType = audioPart.mimeType ?? "";
-        if (mimeType.includes("pcm") && !mimeType.includes("wav")) {
-          // Raw PCM — need to wrap with WAV header via ffmpeg pipe
-          await convertToMp3WithPcm(rawPath, mp3Path, mimeType);
-        } else {
-          await convertToMp3(rawPath, mp3Path);
-        }
-
-        try { fs.unlinkSync(rawPath); } catch { }
-        lastError = null;
-        break;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        attempts++;
-        if (attempts < 3) await new Promise((r) => setTimeout(r, 3000 * attempts));
-      }
+    const mimeType = audioPart.mimeType ?? "";
+    if (mimeType.includes("pcm") && !mimeType.includes("wav")) {
+      await convertToMp3WithPcm(rawPath, mp3Path, mimeType);
+    } else {
+      await convertToMp3(rawPath, mp3Path);
     }
+    try { fs.unlinkSync(rawPath); } catch { }
+    return mp3Path;
+  });
 
-    if (lastError) throw lastError;
-    audioPaths.push(mp3Path);
-  }
-
-  return audioPaths;
+  const mp3Paths = await runConcurrent(tasks, 2);
+  // Return in block order
+  return blocks.map((b) =>
+    path.join(audioDir, `audio_${String(b.blockNumber).padStart(2, "0")}.mp3`)
+  );
 }
 
 // ─── IMAGE GENERATION ────────────────────────────────────────────────────────
