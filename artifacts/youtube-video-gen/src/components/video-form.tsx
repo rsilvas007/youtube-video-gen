@@ -118,17 +118,18 @@ const GEMINI_TTS_VOICES = [
   { id: "gemini-3.1-tts:Rasalgethi", name: "Rasalgethi", desc: "3.1 Flash — Épico ★" },
 ];
 
+// OpenAI TTS is not supported by the Replit proxy — map to Gemini TTS equivalents
 const OPENAI_VOICES = [
-  { id: "onyx",    name: "Onyx",    desc: "Grave e Profundo" },
-  { id: "echo",    name: "Echo",    desc: "Masculino" },
-  { id: "fable",   name: "Fable",   desc: "Dramático" },
-  { id: "alloy",   name: "Alloy",   desc: "Neutro" },
-  { id: "nova",    name: "Nova",    desc: "Feminino" },
-  { id: "shimmer", name: "Shimmer", desc: "Suave" },
-  { id: "ash",     name: "Ash",     desc: "Suave" },
-  { id: "ballad",  name: "Ballad",  desc: "Narrativo" },
-  { id: "sage",    name: "Sage",    desc: "Sábio" },
-  { id: "verse",   name: "Verse",   desc: "Expressivo" },
+  { id: "gemini-tts:Charon",              name: "Onyx",    desc: "Grave e Profundo" },
+  { id: "gemini-tts:Fenrir",              name: "Echo",    desc: "Masculino" },
+  { id: "gemini-3.1-tts:Iapetus",         name: "Fable",   desc: "Dramático" },
+  { id: "gemini-tts:Orus",               name: "Alloy",   desc: "Neutro" },
+  { id: "gemini-tts:Leda",               name: "Nova",    desc: "Feminino" },
+  { id: "gemini-tts:Aoede",              name: "Shimmer", desc: "Suave" },
+  { id: "gemini-tts:Zephyr",             name: "Ash",     desc: "Brilhante e Claro" },
+  { id: "gemini-3.1-tts:Callirrhoe",     name: "Ballad",  desc: "Narrativo" },
+  { id: "gemini-3.1-tts:Algieba",        name: "Sage",    desc: "Sábio e Grave" },
+  { id: "gemini-3.1-tts:Rasalgethi",     name: "Verse",   desc: "Épico, Expressivo" },
 ];
 
 // ─── SUBTITLE STYLES ──────────────────────────────────────────────────────────

@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { videosTable } from "@workspace/db";
 import { generateScript } from "../../lib/video/scriptGenerator.js";
-import { generateAudio } from "../../lib/video/audioGenerator.js";
 import { generateAudioWithElevenLabs } from "../../lib/video/elevenLabsGenerator.js";
 import { generateImages } from "../../lib/video/imageGenerator.js";
 import {
@@ -238,23 +237,25 @@ router.post("/videos/:id/generate", async (req, res) => {
     }
 
     // ─── STEP 2: AUDIO ────────────────────────────────────────────────────────
-    const isElevenLabs = USE_ELEVENLABS && video.voice.length > 20 &&
-      !video.voice.startsWith("gemini-tts:") && !video.voice.startsWith("gemini-3.1-tts:");
     const isGeminiTts = USE_GEMINI &&
       (video.voice.startsWith("gemini-tts:") || video.voice.startsWith("gemini-3.1-tts:"));
-    const ttsModelLabel = video.voice.startsWith("gemini-3.1-tts:") ? "Gemini 3.1 Flash TTS" : "Gemini 2.5 Flash TTS";
-    const audioLabel   = isGeminiTts ? ttsModelLabel : isElevenLabs ? "ElevenLabs" : "OpenAI TTS";
+    const isElevenLabs = USE_ELEVENLABS && !isGeminiTts && video.voice.length > 20;
+    // Safety: any unrecognized (legacy OpenAI-style) voice falls back to Gemini TTS
+    const effectiveVoice = (!isGeminiTts && !isElevenLabs)
+      ? "gemini-tts:Charon"
+      : video.voice;
+    const ttsModelLabel = effectiveVoice.startsWith("gemini-3.1-tts:") ? "Gemini 3.1 Flash TTS" : "Gemini 2.5 Flash TTS";
+    const audioLabel = isGeminiTts ? ttsModelLabel : isElevenLabs ? "ElevenLabs" : ttsModelLabel;
 
     sendEvent("audio", `🎙️ Gerando áudios com ${audioLabel}...`, 18);
     await updateVideo(id, { status: "generating_audio", progress: 18 });
 
     let audioPaths: string[];
-    if (isGeminiTts) {
-      audioPaths = await generateAudioWithGemini(blocks, audioDir, video.voice);
-    } else if (isElevenLabs) {
-      audioPaths = await generateAudioWithElevenLabs(blocks, audioDir, video.voice);
+    if (isElevenLabs) {
+      audioPaths = await generateAudioWithElevenLabs(blocks, audioDir, effectiveVoice);
     } else {
-      audioPaths = await generateAudio(blocks, audioDir, video.voice);
+      // Gemini TTS (includes remapped legacy voices)
+      audioPaths = await generateAudioWithGemini(blocks, audioDir, effectiveVoice);
     }
 
     for (let i = 0; i < audioPaths.length; i++) {
