@@ -1,0 +1,140 @@
+Use this skill whenever a content creator asks for help creating AI-powered video content, documentary-style scripts, YouTube retention strategies, visual storytelling, narration hooks, scene sequences, or anything related to producing technology curiosity videos with AI tools. Trigger when the user mentions: roteiro, script de vídeo, documentário, YouTube, retenção, gancho, narração, cenas, imagens com IA, vídeo com IA, Replit de criador, consistência visual, vídeos longos, storytelling, fluxo de cenas, b-roll, transições, thumbnail, título YouTube, or any request to produce content that should "not look like a slideshow". This skill is essential — use it aggressively whenever video content creation, documentary structure, or YouTube growth strategy is mentioned in any form.🎬 AI DocMaker Skill
+Para criadores de conteúdo de tecnologia com IA — estilo documentário, retenção máxima no YouTube
+
+O QUE ESTA SKILL FAZ
+Transforma briefings simples em roteiros completos de vídeo documentário, com:
+
+Gancho poderoso nos primeiros 3 segundos
+Estrutura narrativa que retém o espectador do início ao fim
+Direção visual precisa para geração de imagens/vídeos com IA (sem repetição, sem estilo slide)
+Todas as técnicas de retenção comprovadas do YouTube para vídeos longos
+
+Consulte os arquivos de referência quando precisar de mais profundidade:
+
+references/retention-techniques.md — Todas as técnicas de retenção com exemplos
+references/visual-direction.md — Guia de prompts para imagens/vídeos com IA
+references/hook-templates.md — Templates de gancho testados e aprovados
+
+
+FLUXO DE TRABALHO OBRIGATÓRIO
+Quando o usuário pedir um roteiro ou vídeo, siga SEMPRE esta sequência:
+FASE 1 — ENTENDER O CONTEÚDO
+Pergunte (ou infira da conversa):
+
+Tema do vídeo — qual curiosidade/tecnologia será explorada?
+Duração alvo — 5min / 10min / 20min / +
+Tom — assustador, inspirador, filosófico, técnico acessível?
+Canal de referência — estilo Veritasium, Kurzgesagt, Cold Fusion?
+
+Se o usuário já deu contexto suficiente, vá direto para a Fase 2.
+FASE 2 — ESTRUTURA DO VÍDEO
+Sempre usar esta arquitetura narrativa:
+[00:00–00:03] GANCHO HARD (os 3 segundos que decidem tudo)
+[00:03–01:30] ABERTURA EXPANSIVA (por que isso importa para VOCÊ)
+[01:30–XX:XX] CORPO NARRATIVO (arcos de revelação progressiva)
+[XX:XX–XX:XX] CLIFFHANGERS INTERNOS (a cada 3–5 minutos)
+[XX:XX–fim]  CONCLUSÃO COM LOOP ABERTO (deixa o espectador querendo mais)
+Detalhamento completo em references/retention-techniques.md.
+FASE 3 — ROTEIRO COM DIREÇÃO VISUAL
+Para cada bloco de cena, entregar:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎬 CENA [número] | [00:00–00:00] | [TIPO]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎙️ NARRAÇÃO:
+[Texto da narração — voz ativa, ritmo variado, sem palavras mortas]
+
+🖼️ VISUAL (Prompt IA):
+[Prompt completo para geração de imagem/vídeo — inglês, estilo cinematográfico]
+
+🎥 MOVIMENTO DE CÂMERA: [ex: slow push-in, parallax, drone pullback]
+⏱️ DURAÇÃO: [ex: 4 segundos]
+🔊 SOM/MÚSICA: [tom sugerido para essa cena]
+📌 NOTA DE CONTINUIDADE: [como essa cena conecta com a próxima visualmente]
+FASE 4 — CHECKLIST DE QUALIDADE
+Antes de entregar o roteiro, verificar:
+
+ Gancho nos primeiros 3s promete algo que o vídeo realmente entrega?
+ Cada cena tem um visual DIFERENTE da anterior (sem repetição)?
+ Nenhuma cena parece um slide de PowerPoint?
+ Há pelo menos 1 cliffhanger interno a cada 5 minutos?
+ A narração usa variação de ritmo (frase curta + frase longa alternadas)?
+ O final deixa uma pergunta em aberto ou teaser?
+ Os prompts de imagem incluem movimento/emoção/perspectiva (não objetos estáticos)?
+
+
+PRINCÍPIOS FUNDAMENTAIS DA SKILL
+🔴 OS 3 PRIMEIROS SEGUNDOS — REGRA DE OURO
+O gancho deve fazer UMA dessas coisas (preferencialmente duas):
+TécnicaExemploAfirmação chocante"Em 2031, você não vai mais tomar decisões sozinho."Pergunta que dói"E se tudo que você aprendeu sobre inteligência estiver errado?"Cena visual impossível[Começa com imagem que não faz sentido — explicação vem depois]Estatística absurda"Isso acontece 40 mil vezes por segundo enquanto você assiste a esse vídeo."Contradição direta"Os cientistas mais brilhantes do mundo estão com medo. E eles têm razão."
+NUNCA começar com: "Olá, bem-vindos ao canal", "Hoje vamos falar sobre", "Você já se perguntou".
+🎨 FILOSOFIA VISUAL — SEM SLIDES, SEM REPETIÇÃO
+Cada imagem/vídeo gerado com IA deve:
+
+Ter perspectiva cinematográfica — não frontal estático
+Conter emoção ou tensão — não apenas "representar" o conceito
+Ser diferente em composição da cena anterior (regra dos terços, ângulos alternados)
+Ter movimento implícito — mesmo imagens estáticas devem sugerir movimento no prompt
+
+Sequência de variação obrigatória (nenhum visual pode repetir o mesmo tipo duas vezes seguidas):
+Macro/detalhe → Vista ampla → Perspectiva humana → Abstrato/conceitual → Macro/detalhe...
+Exemplos de prompts ruins vs. bons:
+❌ RUIM: "A robot thinking about the future"
+✅ BOM: "Close-up of a single glowing blue circuit node, bokeh background of a vast dark server farm, photorealistic, ultra-sharp, cinematic 4K, slight lens flare from below, emotional weight"
+❌ RUIM: "Artificial intelligence concept"
+✅ BOM: "Bird's eye view of a lone human figure standing at the center of a massive glowing neural network grid stretching to the horizon, fog at edges, dawn light, dramatic scale contrast, IMAX quality"
+📊 RETENÇÃO — ESTRUTURA ANTI-ABANDONO
+A Regra dos Loops:
+Nunca fechar completamente uma ideia antes de abrir outra. O espectador deve sempre estar "esperando" por algo.
+LOOP ABERTO → desenvolve → LOOP ABERTO 2 → desenvolve ambos → fecha loop 1 
+→ LOOP ABERTO 3 → fecha loop 2 → [continua]
+Padrão de ritmo narrativo (para vídeos de 10+ minutos):
+MinutoTécnica0:00Gancho Hard0:03Promessa do vídeo ("até o final você vai entender X")1:30Primeiro pico emocional3:00Mini cliffhanger + transição5:00Reviravolta ou informação surpreendente7:00"Mas tem algo que quase ninguém sabe..."9:00Segundo pico emocional (mais alto que o primeiro)11:00"Agora vem a parte mais importante..."FinalConclusão + loop aberto / teaser
+
+TIPOS DE VÍDEO SUPORTADOS
+🔬 REVELAÇÃO CIENTÍFICA
+
+"Descoberta que muda tudo / O que a ciência escondeu"
+Estrutura: Mistério → Investigação → Revelação → Implicações
+
+🤖 TECNOLOGIA DO FUTURO
+
+"O que a IA vai fazer com X / Como será o mundo em 20 anos"
+Estrutura: Provocação → Estado atual → Tendência → Cenários possíveis → Escolha do espectador
+
+🧠 PSICOLOGIA E COMPORTAMENTO
+
+"Por que seu cérebro faz X / A ilusão de Y"
+Estrutura: Experimento → Resultado inesperado → Explicação → Aplicação na sua vida
+
+🌍 HISTÓRIA COM REVIRAVOLTA
+
+"O segredo por trás de X / O que realmente aconteceu"
+Estrutura: Versão popular → "Mas a história real é..." → Revelação progressiva → Lição
+
+⚠️ ALERTA / URGÊNCIA
+
+"Isso vai mudar em X anos / O que poucos perceberam"
+Estrutura: Estatística chocante → Por que poucos viram → Evidências → O que fazer
+
+
+FORMATO DE ENTREGA
+Sempre entregar o roteiro em arquivo .md ou como bloco bem formatado com:
+
+FICHA DO VÍDEO (título, duração, tom, referência visual)
+TÍTULO OTIMIZADO PARA YOUTUBE (com variações A/B)
+THUMBNAIL CONCEPT (descrição visual da thumbnail)
+ROTEIRO COMPLETO com direção visual por cena
+LISTA DE PROMPTS separados ao final (para facilitar geração em lote)
+TAGS E DESCRIÇÃO YOUTUBE (SEO otimizado)
+
+
+REGRAS QUE NUNCA PODEM SER QUEBRADAS
+
+Jamais repetir o mesmo tipo de visual em duas cenas consecutivas
+Jamais começar com "Olá" ou "Bem-vindos"
+Jamais fechar todos os loops ao mesmo tempo (sempre deixar um aberto)
+Jamais usar narração genérica ("É importante destacar que...", "Conforme podemos ver...")
+Sempre variar o comprimento das frases na narração (3 palavras, depois 15, depois 7...)
+Cada prompt de IA deve ter perspectiva, iluminação, emoção e movimento especificados
+O clímax emocional do vídeo deve estar entre 70–80% da duração (não no final)
